@@ -4,9 +4,6 @@ import java.rmi.registry.Registry;
 public class Main {
     public static void main(String[] args) {
 
-        //TODO: Create bulletin board
-        //each cell in the array contains a set of value tag pairs => implement with map?
-
         //TODO: GUI for board for presentation (show that multiple messages can be in same place in array, ...)
 
         try{

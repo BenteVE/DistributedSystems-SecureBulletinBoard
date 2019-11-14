@@ -3,8 +3,8 @@ import java.rmi.RemoteException;
 
 public interface MethodsRMI extends Remote { //extends Remote to avoid local application
 
-    public void add(int index, byte[] value, int tag) throws RemoteException;
+    public void add(int index, byte[] tag, byte value) throws RemoteException;
 
-    public byte[] get(int index, int tag) throws RemoteException;
+    public byte[] get(int index, byte[] tag) throws RemoteException;
 
 }
