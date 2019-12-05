@@ -44,4 +44,28 @@ public class Message implements Serializable {
             return null;
         }
     }
+
+    public int getIndex() {
+        return index;
+    }
+
+    public void setIndex(int index) {
+        this.index = index;
+    }
+
+    public byte[] getTag() {
+        return tag;
+    }
+
+    public void setTag(byte[] tag) {
+        this.tag = tag;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
+    }
 }

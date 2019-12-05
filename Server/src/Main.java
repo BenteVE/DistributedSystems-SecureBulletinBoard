@@ -11,8 +11,10 @@ public class Main {
             Registry registry = LocateRegistry.createRegistry(1099);
             //TODO read in from file for more flexibility
 
+            MethodsImplementationRMI methodsImplementationRMI = new MethodsImplementationRMI();
+
             // create a new service named SecureBulletinBoard
-            registry.rebind("SecureBulletinBoard", new MethodsImplementationRMI());
+            registry.rebind("SecureBulletinBoard", methodsImplementationRMI);
 
         } catch(Exception e) {
             e.printStackTrace();
