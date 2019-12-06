@@ -1,3 +1,4 @@
+import java.util.Arrays;
 import java.util.HashMap;
 
 public class BulletinBoardCell {
@@ -11,7 +12,12 @@ public class BulletinBoardCell {
     }
 
     //Method to retrieve a value from a cell on the board
-    public byte[] getFromCell(byte[] tag){
-        return cell.remove(tag);
+    public byte[] getFromCell(byte[] tag){ //=> probleem: andere bytearray (met zelfde inhoud) => vindt het niet als key
+        for(byte[] tagInBoard : cell.keySet()) {
+            if (Arrays.equals(tagInBoard, tag)){
+                return cell.remove(tagInBoard);
+            }
+        }
+        return null;
     }
 }

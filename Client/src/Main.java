@@ -41,7 +41,7 @@ public class Main extends Application {
 
             //TEST:
             bump();
-            send(implementation, "testmessage");
+            send(implementation, "test");
             String testmessage = receive(implementation);
             System.out.println(testmessage);
 
@@ -143,7 +143,7 @@ public class Main extends Application {
         if (encryptedByteArray != null){
 
             //Get symmetric key for communication partner
-            SecretKey secretKey = getSecretKey(partnerName+".jks", "passwordBob");
+            SecretKey secretKey = getSecretKey(partnerName, "passwordBob");
 
             //Create and initialise cipher
             Cipher cipher = Cipher.getInstance("AES");
@@ -173,7 +173,7 @@ public class Main extends Application {
         }
         //Else return null => currently no message in board
         else
-            return null;
+            return "No message";
 
     }
 

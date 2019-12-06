@@ -2,19 +2,26 @@ import java.util.HashMap;
 
 public class BulletinBoard {
 
-    private static BulletinBoardCell[] board = new BulletinBoardCell[100];
+    private int boardsize;
+    private BulletinBoardCell[] board;
 
     //Constructor
-    public BulletinBoard(){}
+    public BulletinBoard(int boardsize){
+        this.boardsize = boardsize;
+
+        board = new BulletinBoardCell[boardsize];
+        for(int i = 0; i < boardsize; i++){
+            board[i] = new BulletinBoardCell();
+        }
+    }
 
     //Method to add a value/tag pair to the board
-    public static void addToBoard(int index, byte[] tag, byte[] value){
-        System.out.println("test");
+    public void addToBoard(int index, byte[] tag, byte[] value){
         board[index].addToCell(tag, value);
     }
 
     //Method to get a value from a specific index if hashed tag is present
-    public static byte[] getFromBoard(int index, byte[] tag){
+    public byte[] getFromBoard(int index, byte[] tag){
         return board[index].getFromCell(tag);
     }
 
