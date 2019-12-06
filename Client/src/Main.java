@@ -5,7 +5,6 @@ import javafx.scene.Scene;
 import javafx.stage.Stage;
 
 import javax.crypto.*;
-import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
@@ -13,6 +12,8 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.security.*;
 import java.security.cert.CertificateException;
+
+import static java.lang.Thread.sleep;
 
 public class Main extends Application {
 
@@ -39,11 +40,33 @@ public class Main extends Application {
 
             //call methods implemented by server with: implementation.methodname();
 
+
             //TEST:
+            // bump => create files for communication
             bump();
-            send(implementation, "test");
-            String testmessage = receive(implementation);
+
+            //Alice sends 2 messages to her partner Bob
+            CommunicationPartner Bob = (CommunicationPartner) readObjectFromFile("Bob");
+            send(implementation, Bob, "passwordAlice", "Hello Bob, this is Alice");
+            send(implementation, Bob, "passwordAlice", "This is another message from Alice");
+
+            //Bob tries to receive 3 messages from his partner Alice
+            CommunicationPartner Alice = (CommunicationPartner) readObjectFromFile("Alice");
+            String testmessage = receive(implementation, Alice, "passwordBob");
             System.out.println(testmessage);
+            testmessage = receive(implementation, Alice, "passwordBob");
+            System.out.println(testmessage);
+            testmessage = receive(implementation, Alice, "passwordBob");
+            System.out.println(testmessage);
+
+            //Bob sends 1 message to his partner Alice
+            send(implementation, Alice, "passwordBob", "Hello Alice, this is Bob");
+
+            //Alice tries to receive 1 message from her partner Bob
+            testmessage = receive(implementation, Bob, "passwordAlice");
+            System.out.println(testmessage);
+
+
 
         } catch(Exception e) {
             e.printStackTrace();
@@ -79,9 +102,7 @@ public class Main extends Application {
 
     }
 
-    public static void send(MethodsRMI impl, String value) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IOException, BadPaddingException, IllegalBlockSizeException, NotBoundException {
-
-        String partnerName = "Bob";
+    public static void send(MethodsRMI impl, CommunicationPartner partner, String password, String value) throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IOException, BadPaddingException, IllegalBlockSizeException, NotBoundException {
 
         //generate new index for next message in bulletin board (depends on size of array bulletin board)
         int nextIndex = generateIndex();
@@ -93,7 +114,7 @@ public class Main extends Application {
         Message message = new Message(nextIndex, nextTag, value);
 
         //Get symmetric key for communication partner
-        SecretKey secretKey = getSecretKey(partnerName, "passwordAlice");
+        SecretKey secretKey = getSecretKey(partner.getName(), password);
 
         //Create and initialise cipher
         Cipher cipher = Cipher.getInstance("AES");
@@ -103,7 +124,6 @@ public class Main extends Application {
         byte[] cipherMessage = cipher.doFinal(message.getBytes());
 
         //read index and tag from file for certain communication partner
-        CommunicationPartner partner = (CommunicationPartner) readObjectFromFile(partnerName);
         int index = partner.getIndex();
         byte[] tag = partner.getTag();
 
@@ -114,24 +134,21 @@ public class Main extends Application {
         //use function add (implemented by server) to place encrypted package on specific index, associated with hashed tag
         impl.add(index, hashedTag, cipherMessage);
 
-        //replace the stored old index and tag with the new index and tag
-        partner.setIndex(nextIndex);
-        partner.setTag(nextTag);
-        writeObjectToFile(partner, partnerName);
-
         //use a key deriviation function to generate a new symmetric key from the old key
         //TODO: implement key derivation function
 
         //write derived key to keystore for communication partner
-        saveKeyInKeystore(partnerName, "passwordAlice", secretKey);
+        saveKeyInKeystore(partner.getName(), password, secretKey);
+
+        //replace the stored old index and tag with the new index and tag
+        partner.setIndex(nextIndex);
+        partner.setTag(nextTag);
+
     }
 
-    public static String receive(MethodsRMI impl) throws RemoteException, NoSuchPaddingException, NoSuchAlgorithmException, KeyStoreException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
-
-        String partnerName = "Alice";
+    public static String receive(MethodsRMI impl, CommunicationPartner partner, String password) throws RemoteException, NoSuchPaddingException, NoSuchAlgorithmException, KeyStoreException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
 
         //read index and tag from file for certain communication partner
-        CommunicationPartner partner = (CommunicationPartner) readObjectFromFile(partnerName);
         int index = partner.getIndex();
         byte[] tag = partner.getTag();
 
@@ -143,7 +160,7 @@ public class Main extends Application {
         if (encryptedByteArray != null){
 
             //Get symmetric key for communication partner
-            SecretKey secretKey = getSecretKey(partnerName, "passwordBob");
+            SecretKey secretKey = getSecretKey(partner.getName(), password);
 
             //Create and initialise cipher
             Cipher cipher = Cipher.getInstance("AES");
@@ -159,14 +176,13 @@ public class Main extends Application {
             //replace the current index and tag by the new index and tag that were piggybacked on the message
             partner.setIndex(message.getIndex());
             partner.setTag(message.getTag());
-            writeObjectToFile(partner, partnerName);
 
             //TODO: use a key deriviation function to generate a new symmetric key from the old key
             //SecretKey newSymmetricKey = new SecretKeySpec(SymmetricKey.getEncoded(), "AES");//=> wrong, just uses same key
             //use HKDF => https://github.com/patrickfav/hkdf
 
             //write derived key to keystore for communication partner
-            saveKeyInKeystore(partnerName, "passwordBob", secretKey);
+            saveKeyInKeystore(partner.getName(), password, secretKey);
 
             //return the message
             return message.getMessage();
@@ -252,26 +268,26 @@ public class Main extends Application {
     }
 
     private static void writeObjectToFile(Object object, String filename){
-        try {
-            FileOutputStream fileOutputStream = new FileOutputStream(filename);
-            ObjectOutputStream objectOutputStream = new ObjectOutputStream(fileOutputStream);
+        try(ObjectOutputStream objectOutputStream = new ObjectOutputStream(new FileOutputStream(filename))) {
             objectOutputStream.writeObject(object);
-            objectOutputStream.close();
-        }catch (Exception e){
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
     private static Object readObjectFromFile(String filename){
-        try {
-            FileInputStream fileInputStream = new FileInputStream(filename);
-            ObjectInputStream objectInputStream = new ObjectInputStream(fileInputStream);
-            Object object = objectInputStream.readObject();
-            objectInputStream.close();
-            return object;
-        }catch (Exception e){
+        Object object = null;
+        try(ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(filename))){
+            object = objectInputStream.readObject();
+        } catch (FileNotFoundException e) {
             e.printStackTrace();
-            return null;
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
         }
+        return object;
     }
 }
