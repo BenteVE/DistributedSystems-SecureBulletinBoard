@@ -1,4 +1,5 @@
 import java.io.Serializable;
+import java.util.ArrayList;
 
 public class PartnerData implements Serializable {
 
@@ -9,12 +10,36 @@ public class PartnerData implements Serializable {
     int receivingIndex;
     byte[] receivingTag;
 
-    public PartnerData(int sendingIndex, byte[] sendingTag, int receivingIndex, byte[] receivingTag){
+    ArrayList<String> chatHistory;
+
+    public PartnerData(){
         awaitingInitialization = true;
-        this.sendingIndex = sendingIndex;
-        this.sendingTag = sendingTag;
+        this.sendingIndex = -1;
+        this.sendingTag = null;
+        this.receivingIndex = -1;
+        this.receivingTag = null;
+        this.chatHistory = new ArrayList<>();
+    }
+
+    public PartnerData(int receivingIndex, byte[] receivingTag){
+        awaitingInitialization = true;
+        this.sendingIndex = -1;
+        this.sendingTag = null;
         this.receivingIndex = receivingIndex;
         this.receivingTag = receivingTag;
+        this.chatHistory = new ArrayList<>();
+    }
+
+    public void addToChathistory(String value){
+        this.chatHistory.add(value);
+    }
+
+    public ArrayList<String> getChathistory(){
+        return chatHistory;
+    }
+
+    public void setChatHistory(ArrayList<String> chatHistory) {
+        this.chatHistory = chatHistory;
     }
 
     public void setAwaitingInitialization(boolean awaitingInitialization) {

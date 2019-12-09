@@ -10,6 +10,7 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Region;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import javafx.util.Pair;
 
 import javax.crypto.*;
 import java.io.*;
@@ -17,6 +18,7 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.security.*;
+import java.security.spec.ECField;
 import java.util.*;
 
 public class Controller implements Runnable{
@@ -25,6 +27,8 @@ public class Controller implements Runnable{
     private HashMap<String, PartnerData> communicationPartners;
     private ObservableList<String> partnerNames;
     private String currentPartner = null;
+    private boolean loginComplete = false;
+    private String username = null;
     private String password = null;
     private String value = null;
     private boolean runReceiver = true;
@@ -36,60 +40,63 @@ public class Controller implements Runnable{
     @FXML
     private TextArea chatHistory;
 
-    @FXML
-    public void exitApplication() {
-        
-        //stop thread
-        runReceiver = false;
-
-        // Save partnerList
-        writeObjectToFile(communicationPartners, "CommunicationPartners");
-        writeChathistoryToFile(currentPartner);
-        Platform.exit();
-    }
-
     public void initialize(){
 
-        /*TODO: uncomment
-        // Search for SecureBulletinBoard
-        //searchBoard();
-         */
-
         //Check directory for existing keystore, make new keystore with user-given password if no exists
-        password = checkExistingKeystore();
+        if(keystoreFound())
+            login();
+        else
+            createAccount();
 
-        //Check directory for necessary files
-        checkPartnerFiles();
+        if(loginComplete) {
 
-        // Search for partners
-        communicationPartners = (HashMap<String, PartnerData>) readObjectFromFile("CommunicationPartners");
+            /*TODO: uncomment, search for board later?
+            // Search for SecureBulletinBoard
+            //searchBoard();
+             */
 
-        // Add all partner names to listview
-        partnerNames = FXCollections.observableArrayList ();
-        for(String partnerName : communicationPartners.keySet())
-            addToListView(partnerName);
+            // Add all partner names to listview
+            reloadListView();
 
-        partnerNames.sort(Comparator.comparing(String::new));
-        listView.setItems(partnerNames);
+            // Listen to partner changes
+            listView.getSelectionModel().selectedItemProperty().addListener((ChangeListener<String>)
+                    (observable, oldValue, newValue) -> {
+                        currentPartner = newValue;
+                        System.out.println("selected " + currentPartner);
 
-        // Listen to partner changes
-        listView.getSelectionModel().selectedItemProperty().addListener((ChangeListener<String>)
-                (observable, oldValue, newValue)-> {
-                    if (oldValue != null)
-                        writeChathistoryToFile(oldValue);
-                    currentPartner = newValue;
-                    readChathistory();
-                });
+                        if (communicationPartners.get(currentPartner).isAwaitingInitialization())
+                            chatHistory.setText("This partner is still awaiting initialization.");
+                        else
+                            displayChathistory();
+                    });
 
-        //start thread to receive messages
-        new Thread(this).start();
+            // Select first item if available
+            if (!listView.getItems().isEmpty())
+                listView.getSelectionModel().select(0);
+
+            //start thread to receive messages
+            new Thread(this).start();
+        }
+        else
+            exitApplication();
     }
 
-    @FXML
-    private void initializePartner(){
+    @FXML public void exitApplication() {
+        System.out.println("Stopping application ...");
+        if(!loginComplete)
+            Platform.exit();
+        else{
+            //stop thread
+            runReceiver = false;
 
-        //TODO: uncomment on two-sided bump
-        /*
+            encryptFiles();
+            Platform.exit();
+        }
+        System.out.println("Application finished");
+    }
+
+    @FXML private void initializePartner(){
+
         if(!communicationPartners.get(currentPartner).isAwaitingInitialization()){
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
             alert.setTitle("Initializing Partner");
@@ -99,94 +106,74 @@ public class Controller implements Runnable{
             return;
         }
 
-         */
-
         // Open temporary keystore and add secretKeys to own keystore
-        boolean fileChosen = getSecretKeysFromKeystore(password);
-        if(!fileChosen)
-            return;
+        boolean fileChosen = getSecretKeyFromTemporaryKeystore(password);
+        if(!fileChosen) return;
 
         // Open partnerData file and add data to permanent storage
-        HashMap<String, PartnerData> temporaryMap = readPartnerDataFromFile();
+        HashMap<String, PartnerData> temporaryMap = getPartnerFromTemporaryFile();
         if (temporaryMap != null)
             for (String name : temporaryMap.keySet()) {
-                //TODO: execute two-sided bump
-                communicationPartners.put(name, temporaryMap.get(name));
-                partnerNames.add(name); //TODO: remove if bump is two-sided
+                communicationPartners.put(currentPartner, temporaryMap.get(name));
             }
-        //TODO: uncomment on two-sided bump
+
         // set awaitingInitialization to false
         communicationPartners.get(currentPartner).setAwaitingInitialization(false);
     }
 
-    @FXML
-    private void bump() {
-
-        // Get thisUser's name from dialog
-        String thisUser;
-        TextInputDialog dialog = new TextInputDialog("Your Own Name");
-        dialog.setTitle("Creating new partner");
-        dialog.setHeaderText("Creating new partner");
-        dialog.setContentText("Please enter your own name:");
-        Optional<String> result = dialog.showAndWait();
-        if (result.isPresent())
-            thisUser = result.get();
-        else
-            return;
+    @FXML private void bump() {
 
         // Get partnerUser's name from dialog
         String partnerUser;
-        dialog = new TextInputDialog("Your Partner's Name");
+        TextInputDialog dialog = new TextInputDialog("Your Partner's Name");
         dialog.setTitle("Creating new partner");
         dialog.setHeaderText("Creating new partner");
         dialog.setContentText("Please enter your partner's name:");
-        result = dialog.showAndWait();
+        Optional<String> result= dialog.showAndWait();
         if (result.isPresent()){
             partnerUser = result.get();
+            PartnerData partnerData = new PartnerData();
+            communicationPartners.put(partnerUser, partnerData);
+            System.out.println("Added " + partnerUser + " to communicationpartners");
             addToListView(partnerUser);
+            System.out.println("Added " + partnerUser + " to listview");
         }
         else return;
 
-        //Generate Random keys
+        //Generate random key for sending
         SecretKey secretKeyAB = generateSecretKey();
-        SecretKey secretKeyBA = generateSecretKey();
 
-        //Create random indexes
-        int indexAB = generateIndex();
+        //Create random index for receiving
         int indexBA = generateIndex();
 
-        //Create random tags
-        byte[] tagAB = generateTag();
+        //Create random tag for receiving
         byte[] tagBA = generateTag();
 
-        // Create PartnerData
-        PartnerData partnerData = new PartnerData(indexAB, tagAB, indexBA, tagBA);
+        //Add data to partner
+        communicationPartners.get(partnerUser).setReceivingIndex(indexBA);
+        communicationPartners.get(partnerUser).setReceivingTag(tagBA);
 
-        //Create Data for indexes and tags for communicationpartner
-        communicationPartners.put(partnerUser, partnerData);
-
-        //Save SecretKeys in Keystore for communicationpartner
-        saveKeyInKeystore("CommunicationPartners.jks",partnerUser + "-sending", password, secretKeyAB);
-        saveKeyInKeystore("CommunicationPartners.jks", partnerUser + "-receiving", password, secretKeyBA);
-
-        //Create temporary files to give to partner manually
+        //Create temporary file to give to partner manually
         HashMap<String, PartnerData> temporary = new HashMap<>();
-        PartnerData thisUserData = new PartnerData(indexBA, tagBA, indexAB, tagAB);
-        temporary.put(thisUser, thisUserData);
-        writeObjectToFile(temporary, "temporary" + partnerUser);
+        temporary.put(username, new PartnerData(indexBA, tagBA));
+        writePartnerToTemporaryFile(temporary, "bump"+username+ "To" + partnerUser);
 
-        //Create temporary keystore to give to partner manually
-        createKeystore("temporary" + partnerUser + ".jks", "temporary");
-        saveKeyInKeystore("temporary" + partnerUser + ".jks", partnerUser + "-receiving", "temporary", secretKeyAB);
-        saveKeyInKeystore("temporary" + partnerUser + ".jks", partnerUser + "-sending", "temporary", secretKeyBA);
+        //Save SecretKeys in own Keystore for communicationpartner
+        saveKeyInKeystore("CommunicationPartners.jks",partnerUser + "-send", password, secretKeyAB);
+
+        //Create temporary keystore with secretkey to give to partner manually
+        createKeystore("bump"+username+ "To" + partnerUser + ".jks", "temporary");
+        saveKeyInKeystore("bump"+username+ "To" + partnerUser + ".jks", username + "-receive", "temporary", secretKeyAB);
+
+        //Select new partner in listview
+        if (!listView.getItems().isEmpty())
+            listView.getSelectionModel().select(partnerUser);
 
     }
 
-    @FXML
-    private void send() throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException, IOException, BadPaddingException, IllegalBlockSizeException{
+    @FXML private void send() throws RemoteException{
 
         // Can't start sending messages if partner if not initialised
-
         if (communicationPartners.get(currentPartner).isAwaitingInitialization()){
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setTitle("Message not sent");
@@ -200,8 +187,8 @@ public class Controller implements Runnable{
         value = valueTextArea.getText();
         valueTextArea.setText("");
 
-        // Write value to chatHistory
-        chatHistory.appendText("You :" + value + "\n");
+        //update to chatHistory
+        updateChathistory(value, "send");
 
         //generate new index for next message in bulletin board (depends on size of array bulletin board)
         int nextIndex = generateIndex();
@@ -212,32 +199,20 @@ public class Controller implements Runnable{
         //create Message Object with index, tag and message string
         Message message = new Message(nextIndex, nextTag, value);
 
-        //Get symmetric key for communication partner
-        SecretKey secretKey = getSecretKey("CommunicationPartners.jks", currentPartner+"-sending", password);
-
-        //Create and initialise cipher
-        Cipher cipher = Cipher.getInstance("AES");
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey);
-
-        //Encrypt object with cipher
-        byte[] cipherMessage = cipher.doFinal(message.getBytes());
+        //Encrypt message
+        byte[] cipherMessage = encryptMessage(message);
 
         //read index and tag from file for certain communication partner
         int index = communicationPartners.get(currentPartner).getSendingIndex();
         byte[] tag = communicationPartners.get(currentPartner).getSendingTag();
 
         //hash the tag before placing in Bulletin Board
-        MessageDigest md = MessageDigest.getInstance("SHA-256");
-        byte[] hashedTag = md.digest(tag);
+        byte[] hashedTag = hashTag(tag);
 
         //use function add (implemented by server) to place encrypted package on specific index, associated with hashed tag
         implementation.add(index, hashedTag, cipherMessage);
 
-        //use a key deriviation function to generate a new symmetric key from the old key
-        //TODO: implement key derivation function
-
-        //write derived key to keystore for communication partner
-        saveKeyInKeystore("CommunicationPartners.jks", currentPartner+"-sending", password, secretKey);
+        deriveKey("send");
 
         //replace the stored old index and tag with the new index and tag
         communicationPartners.get(currentPartner).setSendingIndex(nextIndex);
@@ -245,9 +220,8 @@ public class Controller implements Runnable{
 
     }
 
-    private void receive(String currentPartner) throws RemoteException, NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, BadPaddingException, IllegalBlockSizeException {
-        if (currentPartner == null)
-            return;
+    private void receive() throws RemoteException {
+        if (currentPartner == null) return;
 
         //read index and tag from file for certain communication partner
         int index = communicationPartners.get(currentPartner).getReceivingIndex();
@@ -260,34 +234,92 @@ public class Controller implements Runnable{
         //IF there is a message on that index of the Bulletin board with that specific tag (message will be returned by get function)
         if (encryptedByteArray != null){
 
-            //Get symmetric key for communication partner
-            SecretKey secretKey = getSecretKey("CommunicationPartners.jks", currentPartner+"-receiving", password);
-
-            //Create and initialise cipher
-            Cipher cipher = Cipher.getInstance("AES");
-            cipher.init(Cipher.DECRYPT_MODE, secretKey);
-
-            //Decrypt the bytearray
-            byte[] decryptedByteArray = cipher.doFinal(encryptedByteArray);
-
-            //Convert decrypted bytearray into Message object
-            Message message = Message.getInstance(decryptedByteArray);
+            //Decrypt bytearray and Convert into Message object
+            Message message = Message.getInstance(decryptMessage(encryptedByteArray));
 
             //IF the message is successfully decrypted by Bob
             //replace the current index and tag by the new index and tag that were piggybacked on the message
             communicationPartners.get(currentPartner).setReceivingIndex(message.getIndex());
             communicationPartners.get(currentPartner).setReceivingTag(message.getTag());
 
-            //TODO: use a key deriviation function to generate a new symmetric key from the old key
-            //use HKDF => https://github.com/patrickfav/hkdf
+            deriveKey("receive");
 
-            //write derived key to keystore for communication partner
-            saveKeyInKeystore("CommunicationPartners.jks", currentPartner+"-receiving", password, secretKey);
-
-            //add message to chat
-            chatHistory.appendText(currentPartner + ": " + value + "\n");
+            //update chathistory
+            updateChathistory(value, "receive");
         }
 
+    }
+
+    private byte[] hashTag(byte[] tag){
+        try{
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hashedTag = md.digest(tag);
+            return hashedTag;
+        }
+        catch (Exception e){
+            e.printStackTrace();
+            return null;
+        }
+
+    }
+
+    private  void deriveKey(String origin){
+        try{
+            //Get symmetric key for communication partner
+            SecretKey secretKey = getSecretKey("CommunicationPartners.jks", currentPartner + "-" + origin, password);
+
+            //use a key deriviation function to generate a new symmetric key from the old key
+            //TODO: implement key derivation function
+
+            //write derived key to keystore for communication partner
+            saveKeyInKeystore("CommunicationPartners.jks", currentPartner + "-" + origin, password, secretKey);
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+
+    }
+
+    private byte[] encryptMessage(Message message){
+
+        try{
+            //Get symmetric key for communication partner
+            SecretKey secretKey = getSecretKey("CommunicationPartners.jks", currentPartner+"-send", password);
+
+            //Create and initialise cipher
+            Cipher cipher = Cipher.getInstance("AES");
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey);
+
+            //Encrypt object with cipher
+            byte[] cipherMessage = cipher.doFinal(message.getBytes());
+
+            return cipherMessage;
+        }
+        catch (Exception e){
+            e.printStackTrace();
+            return null;
+        }
+
+    }
+
+    private byte[] decryptMessage(byte[] encryptedMessage){
+
+        try{
+            //Get symmetric key for communication partner
+            SecretKey secretKey = getSecretKey("CommunicationPartners.jks", currentPartner+"-receive", password);
+
+            //Create and initialise cipher
+            Cipher cipher = Cipher.getInstance("AES");
+            cipher.init(Cipher.DECRYPT_MODE, secretKey);
+
+            //Encrypt object with cipher
+            byte[] decryptedMessage = cipher.doFinal(encryptedMessage);
+
+            return decryptedMessage;
+        }
+        catch (Exception e){
+            e.printStackTrace();
+            return null;
+        }
     }
 
     private static SecretKey generateSecretKey(){
@@ -356,7 +388,7 @@ public class Controller implements Runnable{
         }
     }
 
-    private static SecretKey getSecretKey(String keyStoreName, String partnername, String pwd){
+    private static SecretKey getSecretKey(String keyStoreName, String partnername, String pwd) {
         try {
             KeyStore keyStore = KeyStore.getInstance("JKS");
 
@@ -368,13 +400,11 @@ public class Controller implements Runnable{
             return secretKey;
         }
         catch (Exception e){
-            e.printStackTrace();
-            //TODO: implement wrong file chosen
             return null;
         }
     }
 
-    private static boolean getSecretKeysFromKeystore(String password){
+    private boolean getSecretKeyFromTemporaryKeystore(String password){
 
         //Give info to user
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
@@ -396,16 +426,12 @@ public class Controller implements Runnable{
             //Load temporary keystore
             char[] pwdArray = "temporary".toCharArray();
             keyStore.load(new FileInputStream(file), pwdArray);
-            //cut 'temporary' and '.jks' from string
-            String partnerName = file.getName().substring(9, file.getName().length()-4);
-
-            // TODO: implement function so both parties have input in the resulting key
 
             // Add keys to permanent keystore
-            saveKeyInKeystore("CommunicationPartners.jks", partnerName, password,
-                    (SecretKey) keyStore.getKey(partnerName+"-receiving", pwdArray));
-            saveKeyInKeystore("CommunicationPartners.jks", partnerName, password,
-                    (SecretKey) keyStore.getKey(partnerName+"-receiving", pwdArray));
+            saveKeyInKeystore("CommunicationPartners.jks", currentPartner, password,
+                    (SecretKey) keyStore.getKey(currentPartner + "-receive", pwdArray));
+
+            //TODO: delete temporary keystore
 
             return true;
 
@@ -420,7 +446,7 @@ public class Controller implements Runnable{
         return false;
     }
 
-    private static HashMap<String, PartnerData> readPartnerDataFromFile(){
+    private static HashMap<String, PartnerData> getPartnerFromTemporaryFile(){
 
         //Give info to user
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
@@ -437,12 +463,13 @@ public class Controller implements Runnable{
         fileChooser.getExtensionFilters().add(partnerDataFilter);
         File file = fileChooser.showOpenDialog(new Stage());
 
-        // TODO: implement function so both parties have input in the resulting index and tag
-        HashMap<String, PartnerData> temporaryMap = null;
+        HashMap<String, PartnerData> temporaryMap;
         try(ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(file))){
             temporaryMap = (HashMap<String, PartnerData>) objectInputStream.readObject();
+            //TODO: delete file
             return temporaryMap;
         } catch (NullPointerException e){
+            System.out.println("Wrong file selected for reading partnerdata");
             return null;
         } catch (Exception e){
             e.printStackTrace();
@@ -450,22 +477,12 @@ public class Controller implements Runnable{
         return  null;
     }
 
-    private static void writeObjectToFile(Object object, String filename){
+    private static void writePartnerToTemporaryFile(HashMap<String, PartnerData> map, String filename){
         try(ObjectOutputStream objectOutputStream = new ObjectOutputStream(new FileOutputStream(filename))) {
-            objectOutputStream.writeObject(object);
+            objectOutputStream.writeObject(map);
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-
-    private static Object readObjectFromFile(String filename){
-        Object object = null;
-        try(ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(filename))){
-            object = objectInputStream.readObject();
-        } catch (Exception e){
-            e.printStackTrace();
-        }
-        return object;
     }
 
     private static void searchBoard(){
@@ -486,221 +503,239 @@ public class Controller implements Runnable{
 
     }
 
-    private static void checkPartnerFiles() {
-
-        //Check for existing partnerfile
-        Object object = null;
-        try (ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream("CommunicationPartners"))) {
-            object = objectInputStream.readObject();
-        } catch (FileNotFoundException e) {
-            HashMap<String, PartnerData> hashMap = new HashMap<>();
-            writeObjectToFile(hashMap, "CommunicationPartners");
-            System.out.println("Created new empty partnerfile");
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
+    private void addToListView(String partnerName){
+        partnerNames.add(partnerName);
     }
 
-    private static String checkExistingKeystore(){
+    private void reloadListView(){
+        partnerNames = FXCollections.observableArrayList ();
+        for(String partnerName : communicationPartners.keySet())
+            addToListView(partnerName);
 
-        String password = null;
+        partnerNames.sort(Comparator.comparing(String::new));
+        listView.setItems(partnerNames);
+    }
 
-        try{
+    private boolean keystoreFound(){
+        try {
             //Check for existing keystore
             FileInputStream fileInputStream = new FileInputStream("CommunicationPartners.jks");
+            return true;
+        } catch (FileNotFoundException e){
+            return false;
+        }
+    }
 
-            // if keystore exists, ask password for input
-            KeyStore keyStore = KeyStore.getInstance("JKS");
+    private void createAccount(){
+        // Create the create Account dialog.
+        Dialog<Pair<String, String>> dialog = new Dialog<>();
+        dialog.setTitle("Creating new keystore");
+        dialog.setHeaderText("Choose username and password");
 
-            // if no keystore is found, create new keystore with password given by user
-            // Create the custom dialog.
-            Dialog<String> dialog = new Dialog<>();
-            dialog.setTitle("Login in existing keystore");
-            dialog.setHeaderText("Enter password for the keystore");
+        // Set the button types.
+        ButtonType loginButtonType = new ButtonType("Confirm", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(loginButtonType, ButtonType.CANCEL);
 
-            // Set the button types.
-            ButtonType loginButtonType = new ButtonType("Confirm Password", ButtonBar.ButtonData.OK_DONE);
-            dialog.getDialogPane().getButtonTypes().addAll(loginButtonType, ButtonType.CANCEL);
+        // Create the username and password labels and fields.
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 150, 10, 10));
 
-            // Create the username and password labels and fields.
-            GridPane grid = new GridPane();
-            grid.setHgap(10);
-            grid.setVgap(10);
-            grid.setPadding(new Insets(20, 150, 10, 10));
+        TextField usernameTextField = new TextField();
+        usernameTextField.setPromptText("Username");
+        PasswordField passwordField = new PasswordField();
+        passwordField.setPromptText("Password");
 
-            PasswordField passwordField = new PasswordField();
-            passwordField.setPromptText("Password");
+        grid.add(new Label("Username:"), 0, 0);
+        grid.add(usernameTextField, 1, 0);
+        grid.add(new Label("Password:"), 0, 1);
+        grid.add(passwordField, 1, 1);
 
-            grid.add(new Label("Password:"), 0, 1);
-            grid.add(passwordField, 1, 1);
+        // Enable/Disable login button depending on whether a username was entered.
+        Node loginButton = dialog.getDialogPane().lookupButton(loginButtonType);
+        loginButton.setDisable(true);
 
-            // Enable/Disable login button depending on whether a password was entered.
-            Node loginButton = dialog.getDialogPane().lookupButton(loginButtonType);
-            loginButton.setDisable(true);
+        // Do some validation (using the Java 8 lambda syntax).
+        usernameTextField.textProperty().addListener((observable, oldValue, newValue) -> {
+            loginButton.setDisable(newValue.trim().isEmpty());
+        });
 
-            // Do some validation (using the Java 8 lambda syntax).
-            passwordField.textProperty().addListener((observable, oldValue, newValue) -> {
-                loginButton.setDisable(newValue.trim().isEmpty());
-            });
+        dialog.getDialogPane().setContent(grid);
 
-            dialog.getDialogPane().setContent(grid);
+        // Request focus on the username field by default.
+        Platform.runLater(usernameTextField::requestFocus);
 
-            // Request focus on the username field by default.
-            Platform.runLater(passwordField::requestFocus);
-
-            // Convert the result to a String when the login button is clicked.
-            dialog.setResultConverter(dialogButton -> {
-                if (dialogButton == loginButtonType) {
-                    return passwordField.getText();
-                }
-                return null;
-            });
-
-            Optional<String> result = dialog.showAndWait();
-
-            if(result.isPresent()){
-                password = result.get();
-                //Load keystore
-                char[] pwdArray = password.toCharArray();
-                try {
-                    keyStore.load(fileInputStream, pwdArray);
-                } catch (IOException e) {
-                    // In case of Wrong Password
-                    Alert alert = new Alert(Alert.AlertType.ERROR);
-                    alert.setTitle("Login in existing keystore");
-                    alert.setHeaderText("Entered wrong password");
-                    alert.setContentText("Try again");
-                    alert.showAndWait();
-                    checkExistingKeystore();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+        // Convert the result to a username-password-pair when the login button is clicked.
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == loginButtonType) {
+                return new Pair<>(usernameTextField.getText(), passwordField.getText());
             }
-            else {
-                Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-                alert.setTitle("Login in existing keystore");
-                alert.setHeaderText("Warning");
-                alert.setContentText("If you continue without password you cannot send or receive messages.");
-                alert.getDialogPane().setMinHeight(Region.USE_PREF_SIZE);
+            return null;
+        });
 
-                Optional<ButtonType> resultConfirmation = alert.showAndWait();
-                if (resultConfirmation.get() == ButtonType.OK){
-                    //user pressed OK => continue to application
-                } else {
-                    checkExistingKeystore();
-                }
+        Optional<Pair<String, String>> result = dialog.showAndWait();
+
+        if(result.isPresent()){
+            username = result.get().getKey();
+            password = result.get().getValue();
+            //create keystore and store username as alias for random key to decrypt files
+            createKeystore("CommunicationPartners.jks", password);
+            saveKeyInKeystore("CommunicationPartners.jks", username, password, generateSecretKey());
+            communicationPartners = new HashMap<>();
+            loginComplete = true;
+        }
+        else{
+            //show warning before closing app
+            Alert alert = new Alert(Alert.AlertType.WARNING);
+            alert.setTitle("Warning");
+            alert.setHeaderText("Closing application");
+            alert.setContentText("Need username and password to create keystore");
+            alert.showAndWait();
+        }
+
+    }
+
+    private void login(){
+        // Create the login dialog.
+        Dialog<Pair<String, String>> dialog = new Dialog<>();
+        dialog.setTitle("Login to existing keystore");
+        dialog.setHeaderText("Login");
+
+        // Set the button types.
+        ButtonType loginButtonType = new ButtonType("Login", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(loginButtonType, ButtonType.CANCEL);
+
+        // Create the username and password labels and fields.
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 150, 10, 10));
+
+        TextField usernameTextField = new TextField();
+        usernameTextField.setPromptText("Username");
+        PasswordField passwordField = new PasswordField();
+        passwordField.setPromptText("Password");
+
+        grid.add(new Label("Username:"), 0, 0);
+        grid.add(usernameTextField, 1, 0);
+        grid.add(new Label("Password:"), 0, 1);
+        grid.add(passwordField, 1, 1);
+
+        // Enable/Disable login button depending on whether a username was entered.
+        Node loginButton = dialog.getDialogPane().lookupButton(loginButtonType);
+        loginButton.setDisable(true);
+
+        // Do some validation (using the Java 8 lambda syntax).
+        usernameTextField.textProperty().addListener((observable, oldValue, newValue) -> {
+            loginButton.setDisable(newValue.trim().isEmpty());
+        });
+
+        dialog.getDialogPane().setContent(grid);
+
+        // Request focus on the username field by default.
+        Platform.runLater(usernameTextField::requestFocus);
+
+        // Convert the result to a username-password-pair when the login button is clicked.
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == loginButtonType) {
+                return new Pair<>(usernameTextField.getText(), passwordField.getText());
             }
+            return null;
+        });
 
-        } catch (FileNotFoundException e) {
+        Optional<Pair<String, String>> result = dialog.showAndWait();
 
-            // if no keystore is found, create new keystore with password given by user
-            // Create the custom dialog.
-            Dialog<String> dialog = new Dialog<>();
-            dialog.setTitle("Creating new keystore");
-            dialog.setHeaderText("Enter password for new keystore");
+        if(result.isPresent()){
+            username = result.get().getKey();
+            password = result.get().getValue();
 
-            // Set the button types.
-            ButtonType loginButtonType = new ButtonType("Confirm Password", ButtonBar.ButtonData.OK_DONE);
-            dialog.getDialogPane().getButtonTypes().addAll(loginButtonType, ButtonType.CANCEL);
-
-            // Create the username and password labels and fields.
-            GridPane grid = new GridPane();
-            grid.setHgap(10);
-            grid.setVgap(10);
-            grid.setPadding(new Insets(20, 150, 10, 10));
-
-            PasswordField passwordField = new PasswordField();
-            passwordField.setPromptText("Password");
-
-            grid.add(new Label("Password:"), 0, 1);
-            grid.add(passwordField, 1, 1);
-
-            // Enable/Disable login button depending on whether a password was entered.
-            Node loginButton = dialog.getDialogPane().lookupButton(loginButtonType);
-            loginButton.setDisable(true);
-
-            // Do some validation (using the Java 8 lambda syntax).
-            passwordField.textProperty().addListener((observable, oldValue, newValue) -> {
-                loginButton.setDisable(newValue.trim().isEmpty());
-            });
-
-            dialog.getDialogPane().setContent(grid);
-
-            // Request focus on the username field by default.
-            Platform.runLater(passwordField::requestFocus);
-
-            // Convert the result to a String when the login button is clicked.
-            dialog.setResultConverter(dialogButton -> {
-                if (dialogButton == loginButtonType) {
-                    return passwordField.getText();
-                }
-                return null;
-            });
-
-            Optional<String> result = dialog.showAndWait();
-
-            if(result.isPresent()){
-                password = result.get();
-                createKeystore("CommunicationPartners.jks", password);
-                System.out.println("Created keystore with new password");
-            }
-            else {
-                // In case of Wrong Password
+            //Try to decrypt files with username and password
+            if (!decryptFiles()){
+                // Wrong password
                 Alert alert = new Alert(Alert.AlertType.ERROR);
-                alert.setTitle("Creating new Keystore");
-                alert.setHeaderText("Warning");
-                alert.setContentText("Can't create new keystore without password");
+                alert.setTitle("Error");
+                alert.setHeaderText("Couldn't decrypt files");
+                alert.setContentText("Wrong username or password");
                 alert.showAndWait();
-                checkExistingKeystore();
+                login();
             }
-        } catch (Exception e){
-            e.printStackTrace();
-        } finally {
-            return password;
+
+            loginComplete = true;
+        }
+        else{
+            //show warning before closing app
+            Alert alert = new Alert(Alert.AlertType.WARNING);
+            alert.setTitle("Warning");
+            alert.setHeaderText("Closing application");
+            alert.setContentText("Can't log in without credentials");
+            alert.showAndWait();
         }
     }
 
-    private void writeChathistoryToFile(String partner) {
-        ObservableList<CharSequence> chatHistoryParagraphs = chatHistory.getParagraphs();
-        Iterator<CharSequence>  iterator = chatHistoryParagraphs.iterator();
+    private  boolean decryptFiles() {
+        //decrypt the file with partnerlist and all textfiles with chathistory
+        try {
+            ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream("CommunicationPartners"));
+            SealedObject sealedObject = (SealedObject) objectInputStream.readObject();
+
+            // Get secretkey to decrypt files
+            SecretKey secretKey = getSecretKey("CommunicationPartners.jks", username, password);
+
+            //Create and initialise cipher
+            Cipher cipher = Cipher.getInstance("AES");
+            cipher.init(Cipher.DECRYPT_MODE, secretKey);
+
+            //Open Sealed object
+            communicationPartners = (HashMap<String, PartnerData>) sealedObject.getObject(cipher);
+            System.out.println("Decryption successful");
+            return true;
+        }
+        catch (Exception e){
+            System.out.println("Decryption failed");
+            return false;
+        }
+    }
+
+    private void encryptFiles(){
+        System.out.println("Encrypting files...");
         try{
-            BufferedWriter bufferedWriter = new BufferedWriter(new FileWriter(partner + ".txt"));
-            while(iterator.hasNext()){
-                CharSequence seq = iterator.next();
-                bufferedWriter.append(seq);
-                bufferedWriter.newLine();
-            }
-            bufferedWriter.flush();
-            bufferedWriter.close();
-        } catch (FileNotFoundException e){
-            //create empty file
-            File file = new File(partner + ".txt");
-            writeChathistoryToFile(partner);
-        } catch (Exception e){
+            // Get secretkey to decrypt files
+            SecretKey secretKey = getSecretKey("CommunicationPartners.jks", username, password);
+
+            //Create and initialise cipher
+            Cipher cipher = Cipher.getInstance("AES");
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey);
+
+            //Create SealedObject
+            SealedObject sealedObject = new SealedObject(communicationPartners, cipher);
+
+            //Write SealedObject to File
+            ObjectOutputStream objectOutputStream = new ObjectOutputStream(new FileOutputStream("CommunicationPartners"));
+            objectOutputStream.writeObject(sealedObject);
+            System.out.println("Encrypting finished");
+
+        }catch (Exception e){
             e.printStackTrace();
         }
     }
 
-    private void readChathistory() {
-        try{
-            Scanner scanner = new Scanner(new File(currentPartner + ".txt"));
-            while (scanner.hasNext()) {
-                chatHistory.appendText(scanner.nextLine() + "\n");
-            }
-            scanner.close();
-        } catch (FileNotFoundException e){
-            //create empty file
-            File file = new File(currentPartner + ".txt");
-        }
+    private void displayChathistory(){
+        for (String message : communicationPartners.get(currentPartner).getChathistory())
+            chatHistory.appendText(message + "\n");
     }
 
-    private void addToListView(String partnerName){
-        //TODO: fix for two-sided bump
-        if (communicationPartners.get(partnerName).isAwaitingInitialization())
-            partnerNames.add(partnerName + "(awaiting initialization)");
-        else
-            partnerNames.add(partnerName);
+    private void updateChathistory(String value, String origin){
+        if(origin == "send"){
+            value = "You :" + value + "\n";
+            communicationPartners.get(currentPartner).addToChathistory(value);
+            chatHistory.appendText(value);
+        }
+        else if(origin == "receive"){
+            value = currentPartner + ": " + value + "\n";
+            communicationPartners.get(currentPartner).addToChathistory(value);
+            chatHistory.appendText(value);
+        }
     }
 
     @Override
@@ -708,7 +743,8 @@ public class Controller implements Runnable{
         try {
             while(runReceiver){
                 //test for messages from current partner every 5 seconds
-                receive(currentPartner);
+                if (!communicationPartners.isEmpty() && !communicationPartners.get(currentPartner).isAwaitingInitialization())
+                    receive();
                 Thread.sleep(5000);
             }
         } catch (Exception e) {
