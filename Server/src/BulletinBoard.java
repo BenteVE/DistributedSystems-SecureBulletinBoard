@@ -2,12 +2,10 @@ import java.util.HashMap;
 
 public class BulletinBoard {
 
-    private int boardsize;
     private BulletinBoardCell[] board;
 
     //Constructor
     public BulletinBoard(int boardsize){
-        this.boardsize = boardsize;
 
         board = new BulletinBoardCell[boardsize];
         for(int i = 0; i < boardsize; i++){

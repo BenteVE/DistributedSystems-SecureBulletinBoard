@@ -14,16 +14,16 @@ import javafx.util.Pair;
 
 import javax.crypto.*;
 import java.io.*;
+import java.rmi.ConnectException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.security.*;
-import java.security.spec.ECField;
 import java.util.*;
 
 public class Controller implements Runnable{
 
-    private static MethodsRMI implementation;
+    private MethodsRMI implementation;
     private HashMap<String, PartnerData> communicationPartners;
     private ObservableList<String> partnerNames;
     private String currentPartner = null;
@@ -31,7 +31,7 @@ public class Controller implements Runnable{
     private String username = null;
     private String password = null;
     private String value = null;
-    private boolean runReceiver = true;
+    private boolean runReceiver = false;
 
     @FXML
     private ListView listView;
@@ -43,18 +43,13 @@ public class Controller implements Runnable{
     public void initialize(){
 
         //Check directory for existing keystore, make new keystore with user-given password if no exists
-        if(keystoreFound())
+        File file = new File("CommunicationPartners.jks");
+        if(file.exists())
             login();
         else
             createAccount();
 
         if(loginComplete) {
-
-            /*TODO: uncomment, search for board later?
-            // Search for SecureBulletinBoard
-            //searchBoard();
-             */
-
             // Add all partner names to listview
             reloadListView();
 
@@ -74,11 +69,13 @@ public class Controller implements Runnable{
             if (!listView.getItems().isEmpty())
                 listView.getSelectionModel().select(0);
 
-            //start thread to receive messages
-            new Thread(this).start();
+            // Search for SecureBulletinBoard and start thread if found
+            searchBoard();
         }
-        else
+        else{
             exitApplication();
+            System.out.println("Finished initialization of application");
+        }
     }
 
     @FXML public void exitApplication() {
@@ -92,10 +89,18 @@ public class Controller implements Runnable{
             encryptFiles();
             Platform.exit();
         }
-        System.out.println("Application finished");
     }
 
     @FXML private void initializePartner(){
+
+        if(currentPartner == null){
+            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+            alert.setTitle("No partner selected");
+            alert.setHeaderText("Information:");
+            alert.setContentText("You have to create a partner before initialization.");
+            alert.showAndWait();
+            return;
+        }
 
         if(!communicationPartners.get(currentPartner).isAwaitingInitialization()){
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
@@ -107,18 +112,55 @@ public class Controller implements Runnable{
         }
 
         // Open temporary keystore and add secretKeys to own keystore
-        boolean fileChosen = getSecretKeyFromTemporaryKeystore(password);
-        if(!fileChosen) return;
+        String filepath = getSecretKeyFromTemporaryKeystore(password);
+        if(filepath == null) return;
 
         // Open partnerData file and add data to permanent storage
-        HashMap<String, PartnerData> temporaryMap = getPartnerFromTemporaryFile();
+        HashMap<String, PartnerData> temporaryMap = getPartnerFromTemporaryFile(filepath);
         if (temporaryMap != null)
             for (String name : temporaryMap.keySet()) {
-                communicationPartners.put(currentPartner, temporaryMap.get(name));
+                communicationPartners.get(currentPartner).setSendingIndex(temporaryMap.get(name).getReceivingIndex());
+                communicationPartners.get(currentPartner).setSendingTag(temporaryMap.get(name).getReceivingTag());
             }
 
         // set awaitingInitialization to false
         communicationPartners.get(currentPartner).setAwaitingInitialization(false);
+        displayChathistory();
+
+    }
+
+    @FXML private void searchBoard(){
+
+        try {
+            // fire to localhost port 1099
+            Registry myRegistry = LocateRegistry.getRegistry("localhost", 1099);
+            //TODO read in from file for more flexibility
+
+            // search for SecureBulletinBoard
+            implementation = (MethodsRMI) myRegistry.lookup("SecureBulletinBoard");
+
+            //if not receiver thread is running, start a new thread
+            if (!runReceiver) {
+                runReceiver = true;
+                new Thread(this).start();
+            }
+
+        } catch (ConnectException e){
+            System.out.println("Connection to server lost");
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Error");
+            alert.setHeaderText("Lost Connection to server");
+            alert.setContentText("Try again later or change the host");
+            alert.showAndWait();
+        } catch(Exception e) {
+            System.out.println("Couldn't reach server ...");
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Error");
+            alert.setHeaderText("Can't reach server");
+            alert.setContentText("Try again later or change the host");
+            alert.showAndWait();
+        }
+
     }
 
     @FXML private void bump() {
@@ -206,6 +248,8 @@ public class Controller implements Runnable{
         int index = communicationPartners.get(currentPartner).getSendingIndex();
         byte[] tag = communicationPartners.get(currentPartner).getSendingTag();
 
+        System.out.println("Sent message to " + index + " with tag " + tag);
+
         //hash the tag before placing in Bulletin Board
         byte[] hashedTag = hashTag(tag);
 
@@ -231,11 +275,12 @@ public class Controller implements Runnable{
         //(use get function with regular tag, server hashes tag to match hashed tag associated with value in Bulletin Board)
         byte[] encryptedByteArray = implementation.get(index, tag);
 
-        //IF there is a message on that index of the Bulletin board with that specific tag (message will be returned by get function)
-        if (encryptedByteArray != null){
+        if (encryptedByteArray != null) {
 
+            //IF there is a message on that index of the Bulletin board with that specific tag (message will be returned by get function)
             //Decrypt bytearray and Convert into Message object
             Message message = Message.getInstance(decryptMessage(encryptedByteArray));
+            value = message.getMessage();
 
             //IF the message is successfully decrypted by Bob
             //replace the current index and tag by the new index and tag that were piggybacked on the message
@@ -246,12 +291,13 @@ public class Controller implements Runnable{
 
             //update chathistory
             updateChathistory(value, "receive");
-        }
 
+        }
     }
 
     private byte[] hashTag(byte[] tag){
         try{
+            System.out.println(tag);
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             byte[] hashedTag = md.digest(tag);
             return hashedTag;
@@ -263,9 +309,10 @@ public class Controller implements Runnable{
 
     }
 
-    private  void deriveKey(String origin){
+    private void deriveKey(String origin){
         try{
             //Get symmetric key for communication partner
+            System.out.println("Deriving: " + currentPartner + "-" + origin);
             SecretKey secretKey = getSecretKey("CommunicationPartners.jks", currentPartner + "-" + origin, password);
 
             //use a key deriviation function to generate a new symmetric key from the old key
@@ -350,7 +397,7 @@ public class Controller implements Runnable{
     private static void createKeystore(String keyStoreName, String pwd){
 
         try {
-            KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+            KeyStore keyStore = KeyStore.getInstance("JCEKS");
 
             //Load keystore
             char[] pwdArray = pwd.toCharArray();
@@ -368,7 +415,7 @@ public class Controller implements Runnable{
 
     private static void saveKeyInKeystore(String keyStoreName, String partnerName, String pwd, SecretKey secretKey){
         try{
-            KeyStore keyStore = KeyStore.getInstance("JKS");
+            KeyStore keyStore = KeyStore.getInstance("JCEKS");
 
             //Load keystore
             char[] pwdArray = pwd.toCharArray();
@@ -383,6 +430,8 @@ public class Controller implements Runnable{
             FileOutputStream fileOutputStream = new FileOutputStream(keyStoreName);
             keyStore.store(fileOutputStream, pwdArray);
 
+            System.out.println("Saved in keystore: " + partnerName);
+
         }catch (Exception e){
             e.printStackTrace();
         }
@@ -390,7 +439,7 @@ public class Controller implements Runnable{
 
     private static SecretKey getSecretKey(String keyStoreName, String partnername, String pwd) {
         try {
-            KeyStore keyStore = KeyStore.getInstance("JKS");
+            KeyStore keyStore = KeyStore.getInstance("JCEKS");
 
             //Load keystore
             char[] pwdArray = pwd.toCharArray();
@@ -404,13 +453,13 @@ public class Controller implements Runnable{
         }
     }
 
-    private boolean getSecretKeyFromTemporaryKeystore(String password){
+    private String getSecretKeyFromTemporaryKeystore(String password){
 
         //Give info to user
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
         alert.setTitle("Choosing keyfile created by partner");
         alert.setHeaderText("Filechooser information");
-        alert.setContentText("Use the following filechooser to choose the keystore file created in the bump of your partner");
+        alert.setContentText("Use the following filechooser to choose the keystore file created in the bump of your partner. Make sure the other bump-file is in the same directory.");
         alert.getDialogPane().setMinHeight(Region.USE_PREF_SIZE);
         alert.showAndWait();
 
@@ -421,52 +470,42 @@ public class Controller implements Runnable{
         File file = fileChooser.showOpenDialog(new Stage());
 
         try {
-            KeyStore keyStore = KeyStore.getInstance("JKS");
+            KeyStore keyStore = KeyStore.getInstance("JCEKS");
 
             //Load temporary keystore
             char[] pwdArray = "temporary".toCharArray();
             keyStore.load(new FileInputStream(file), pwdArray);
 
             // Add keys to permanent keystore
-            saveKeyInKeystore("CommunicationPartners.jks", currentPartner, password,
+            saveKeyInKeystore("CommunicationPartners.jks", currentPartner + "-receive", password,
                     (SecretKey) keyStore.getKey(currentPartner + "-receive", pwdArray));
 
-            //TODO: delete temporary keystore
-
-            return true;
-
+            if(file.delete()){
+                System.out.println("Deleted Temporary Keystore");
+                return file.getAbsolutePath();
+            }
         }
         catch (NullPointerException e){
-            return false;
+            return null;
         } catch (Exception e){
             //TODO: implement wrong file chosen
             e.printStackTrace();
         }
 
-        return false;
+        return null;
     }
 
-    private static HashMap<String, PartnerData> getPartnerFromTemporaryFile(){
+    private static HashMap<String, PartnerData> getPartnerFromTemporaryFile(String filepath){
 
-        //Give info to user
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Choosing partner information created by partner");
-        alert.setHeaderText("Filechooser information");
-        alert.setContentText("Use the following filechooser to choose the partner information file created in the bump of your partner");
-        alert.getDialogPane().setMinHeight(Region.USE_PREF_SIZE);
-        alert.showAndWait();
+        System.out.println(filepath);
 
-        // Set extension filter
-        // FileChooser.ExtensionFilter extFilter = new FileChooser.ExtensionFilter("AVI files (*.avi)", "*.avi");
-        FileChooser fileChooser = new FileChooser();
-        FileChooser.ExtensionFilter partnerDataFilter = new FileChooser.ExtensionFilter("All files", "*.*");
-        fileChooser.getExtensionFilters().add(partnerDataFilter);
-        File file = fileChooser.showOpenDialog(new Stage());
-
+        File file = new File(filepath.substring(0, filepath.length()-4));
         HashMap<String, PartnerData> temporaryMap;
         try(ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(file))){
             temporaryMap = (HashMap<String, PartnerData>) objectInputStream.readObject();
-            //TODO: delete file
+            objectInputStream.close();//TODO: file doesn't delete
+            if(file.delete())
+                System.out.println("Deleted Temporary file");
             return temporaryMap;
         } catch (NullPointerException e){
             System.out.println("Wrong file selected for reading partnerdata");
@@ -485,24 +524,6 @@ public class Controller implements Runnable{
         }
     }
 
-    private static void searchBoard(){
-
-        try{
-            // fire to localhost port 1099
-            Registry myRegistry= LocateRegistry.getRegistry("localhost", 1099);
-            //TODO read in from file for more flexibility
-
-            // search for SecureBulletinBoard
-            implementation = (MethodsRMI) myRegistry.lookup("SecureBulletinBoard");
-
-            //call methods implemented by server with: implementation.methodname();
-
-        } catch(Exception e) {
-            e.printStackTrace();
-        }
-
-    }
-
     private void addToListView(String partnerName){
         partnerNames.add(partnerName);
     }
@@ -514,16 +535,6 @@ public class Controller implements Runnable{
 
         partnerNames.sort(Comparator.comparing(String::new));
         listView.setItems(partnerNames);
-    }
-
-    private boolean keystoreFound(){
-        try {
-            //Check for existing keystore
-            FileInputStream fileInputStream = new FileInputStream("CommunicationPartners.jks");
-            return true;
-        } catch (FileNotFoundException e){
-            return false;
-        }
     }
 
     private void createAccount(){
@@ -660,8 +671,6 @@ public class Controller implements Runnable{
                 alert.showAndWait();
                 login();
             }
-
-            loginComplete = true;
         }
         else{
             //show warning before closing app
@@ -673,7 +682,7 @@ public class Controller implements Runnable{
         }
     }
 
-    private  boolean decryptFiles() {
+    private boolean decryptFiles() {
         //decrypt the file with partnerlist and all textfiles with chathistory
         try {
             ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream("CommunicationPartners"));
@@ -688,6 +697,7 @@ public class Controller implements Runnable{
 
             //Open Sealed object
             communicationPartners = (HashMap<String, PartnerData>) sealedObject.getObject(cipher);
+            loginComplete = true;
             System.out.println("Decryption successful");
             return true;
         }
@@ -721,13 +731,14 @@ public class Controller implements Runnable{
     }
 
     private void displayChathistory(){
+        chatHistory.setText("");
         for (String message : communicationPartners.get(currentPartner).getChathistory())
-            chatHistory.appendText(message + "\n");
+            chatHistory.appendText(message);
     }
 
     private void updateChathistory(String value, String origin){
         if(origin == "send"){
-            value = "You :" + value + "\n";
+            value = "You: " + value + "\n";
             communicationPartners.get(currentPartner).addToChathistory(value);
             chatHistory.appendText(value);
         }
@@ -743,8 +754,11 @@ public class Controller implements Runnable{
         try {
             while(runReceiver){
                 //test for messages from current partner every 5 seconds
-                if (!communicationPartners.isEmpty() && !communicationPartners.get(currentPartner).isAwaitingInitialization())
+                if (!communicationPartners.isEmpty() && !communicationPartners.get(currentPartner).isAwaitingInitialization()){
+                    searchBoard();
+                    //System.out.println("Polling for: " + currentPartner);
                     receive();
+                }
                 Thread.sleep(5000);
             }
         } catch (Exception e) {

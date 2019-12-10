@@ -17,10 +17,12 @@ public class MethodsImplementationRMI extends UnicastRemoteObject implements Met
     public void add(int index, byte[] tag, byte[] value) throws RemoteException{
         //place the value on a specific index in the bulletin board, associated with a specific tag
         bulletinBoard.addToBoard(index, tag, value);
+        System.out.println("Added to index " + index + " and tag " + tag);
     }
 
     @Override
     public byte[] get(int index, byte[] tag) throws RemoteException, NoSuchAlgorithmException {
+        System.out.println("Called get for index " + index + " and tag " + tag);
         //use hash on tag to get the hashed tag
         //Digest Message
         MessageDigest md = MessageDigest.getInstance("SHA-256");
@@ -33,6 +35,7 @@ public class MethodsImplementationRMI extends UnicastRemoteObject implements Met
 
         //Get value from board (NULL if board is empty)
         byte[] value = bulletinBoard.getFromBoard(index, hashedTag);
+        System.out.println("Returned " + value);
         return value;
 
 

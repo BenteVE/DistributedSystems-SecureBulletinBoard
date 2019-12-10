@@ -6,6 +6,8 @@ public class Main {
 
         //TODO: GUI for board for presentation (show that multiple messages can be in same place in array, ...)
 
+        //TODO: read and write board from file
+
         try{
             // create on port 1099
             Registry registry = LocateRegistry.createRegistry(1099);
