@@ -7,10 +7,8 @@ public class MethodsImplementationRMI extends UnicastRemoteObject implements Met
 
     BulletinBoard bulletinBoard;
 
-    //Constructor
-    public MethodsImplementationRMI () throws RemoteException{
-        int boardsize = 100;
-        bulletinBoard = new BulletinBoard(boardsize);
+    public MethodsImplementationRMI(BulletinBoard bulletinBoard) throws RemoteException {
+        this.bulletinBoard = bulletinBoard;
     }
 
     @Override
@@ -37,7 +35,6 @@ public class MethodsImplementationRMI extends UnicastRemoteObject implements Met
         byte[] value = bulletinBoard.getFromBoard(index, hashedTag);
         System.out.println("Returned " + value);
         return value;
-
 
     }
 

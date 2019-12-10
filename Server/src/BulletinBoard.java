@@ -1,6 +1,7 @@
+import java.io.Serializable;
 import java.util.HashMap;
 
-public class BulletinBoard {
+public class BulletinBoard implements Serializable {
 
     private BulletinBoardCell[] board;
 

@@ -1,27 +1,29 @@
-import java.rmi.registry.LocateRegistry;
-import java.rmi.registry.Registry;
+import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.fxml.FXMLLoader;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.stage.Stage;
 
-public class Main {
+public class Main extends Application{
+
+    @Override
+    public void start(Stage primaryStage) throws Exception{
+        FXMLLoader loader = new FXMLLoader(getClass().getResource("DemoGUI.fxml"));
+        Parent root = loader.load();
+        ControllerDemoGUI controller = loader.getController();
+        primaryStage.setTitle("Server Demo GUI");
+        primaryStage.setScene(new Scene(root, 1200, 600));
+        primaryStage.show();
+        primaryStage.setOnHidden(e -> {
+            controller.writeBoardToFile();
+            Platform.exit();
+        });
+    }
+
     public static void main(String[] args) {
 
-        //TODO: GUI for board for presentation (show that multiple messages can be in same place in array, ...)
+        launch(args);
 
-        //TODO: read and write board from file
-
-        try{
-            // create on port 1099
-            Registry registry = LocateRegistry.createRegistry(1099);
-            //TODO read in from file for more flexibility
-
-            MethodsImplementationRMI methodsImplementationRMI = new MethodsImplementationRMI();
-
-            // create a new service named SecureBulletinBoard
-            registry.rebind("SecureBulletinBoard", methodsImplementationRMI);
-
-        } catch(Exception e) {
-            e.printStackTrace();
-        }
-
-        System.out.println("system is ready");
     }
 }

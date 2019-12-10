@@ -41,9 +41,10 @@
          <children>
             <MenuBar>
               <menus>
-                <Menu mnemonicParsing="false" text="File">
+                <Menu mnemonicParsing="false" text="Application">
                   <items>
                         <MenuItem mnemonicParsing="false" onAction="#searchBoard" text="Contact Bulletin Board" />
+                        <MenuItem mnemonicParsing="false" onAction="#setServerIP" text="Change Server IP" />
                     <MenuItem mnemonicParsing="false" onAction="#exitApplication" text="Close Application" />
                   </items>
                 </Menu>

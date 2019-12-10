@@ -13,6 +13,7 @@ import javafx.stage.Stage;
 import javafx.util.Pair;
 
 import javax.crypto.*;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
 import java.rmi.ConnectException;
 import java.rmi.RemoteException;
@@ -22,6 +23,9 @@ import java.security.*;
 import java.util.*;
 
 public class Controller implements Runnable{
+
+    private static int BOARDSIZE = 25;
+    private String serverIP = "localhost";
 
     private MethodsRMI implementation;
     private HashMap<String, PartnerData> communicationPartners;
@@ -69,8 +73,8 @@ public class Controller implements Runnable{
             if (!listView.getItems().isEmpty())
                 listView.getSelectionModel().select(0);
 
-            // Search for SecureBulletinBoard and start thread if found
-            searchBoard();
+            // Set the ip for the SecureBulletinBoard and connect of possible
+            setServerIP();
         }
         else{
             exitApplication();
@@ -133,7 +137,7 @@ public class Controller implements Runnable{
 
         try {
             // fire to localhost port 1099
-            Registry myRegistry = LocateRegistry.getRegistry("localhost", 1099);
+            Registry myRegistry = LocateRegistry.getRegistry(serverIP, 1099);
             //TODO read in from file for more flexibility
 
             // search for SecureBulletinBoard
@@ -215,6 +219,8 @@ public class Controller implements Runnable{
 
     @FXML private void send() throws RemoteException{
 
+        if(currentPartner == null) return;
+
         // Can't start sending messages if partner if not initialised
         if (communicationPartners.get(currentPartner).isAwaitingInitialization()){
             Alert alert = new Alert(Alert.AlertType.ERROR);
@@ -228,9 +234,6 @@ public class Controller implements Runnable{
         // Get value from textArea
         value = valueTextArea.getText();
         valueTextArea.setText("");
-
-        //update to chatHistory
-        updateChathistory(value, "send");
 
         //generate new index for next message in bulletin board (depends on size of array bulletin board)
         int nextIndex = generateIndex();
@@ -248,19 +251,29 @@ public class Controller implements Runnable{
         int index = communicationPartners.get(currentPartner).getSendingIndex();
         byte[] tag = communicationPartners.get(currentPartner).getSendingTag();
 
-        System.out.println("Sent message to " + index + " with tag " + tag);
-
         //hash the tag before placing in Bulletin Board
         byte[] hashedTag = hashTag(tag);
 
-        //use function add (implemented by server) to place encrypted package on specific index, associated with hashed tag
-        implementation.add(index, hashedTag, cipherMessage);
+        try{
+            //use function add (implemented by server) to place encrypted package on specific index, associated with hashed tag
+            implementation.add(index, hashedTag, cipherMessage);
 
-        deriveKey("send");
+            //update to chatHistory
+            updateChathistory(value, "send");
 
-        //replace the stored old index and tag with the new index and tag
-        communicationPartners.get(currentPartner).setSendingIndex(nextIndex);
-        communicationPartners.get(currentPartner).setSendingTag(nextTag);
+            deriveKey("send");
+
+            //replace the stored old index and tag with the new index and tag
+            communicationPartners.get(currentPartner).setSendingIndex(nextIndex);
+            communicationPartners.get(currentPartner).setSendingTag(nextTag);
+
+        }catch(NullPointerException e){
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Error");
+            alert.setHeaderText("Message not sent");
+            alert.setContentText("Server could not be reached");
+            alert.showAndWait();
+        }
 
     }
 
@@ -298,8 +311,8 @@ public class Controller implements Runnable{
     private byte[] hashTag(byte[] tag){
         try{
             System.out.println(tag);
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] hashedTag = md.digest(tag);
+            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
+            byte[] hashedTag = messageDigest.digest(tag);
             return hashedTag;
         }
         catch (Exception e){
@@ -316,10 +329,12 @@ public class Controller implements Runnable{
             SecretKey secretKey = getSecretKey("CommunicationPartners.jks", currentPartner + "-" + origin, password);
 
             //use a key deriviation function to generate a new symmetric key from the old key
-            //TODO: implement key derivation function
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] secretKeyByteArray = md.digest(secretKey.getEncoded());
+            SecretKey newSecretKey = new SecretKeySpec(secretKeyByteArray, 0, secretKeyByteArray.length, "AES");
 
             //write derived key to keystore for communication partner
-            saveKeyInKeystore("CommunicationPartners.jks", currentPartner + "-" + origin, password, secretKey);
+            saveKeyInKeystore("CommunicationPartners.jks", currentPartner + "-" + origin, password, newSecretKey);
         }catch (Exception e){
             e.printStackTrace();
         }
@@ -372,9 +387,8 @@ public class Controller implements Runnable{
     private static SecretKey generateSecretKey(){
         try{
             KeyGenerator keyGenerator = KeyGenerator.getInstance("AES");
-            keyGenerator.init(128);
+            keyGenerator.init(256);
             return keyGenerator.generateKey();
-
         }
         catch (Exception e){
             e.printStackTrace();
@@ -384,7 +398,7 @@ public class Controller implements Runnable{
 
     private static int generateIndex(){
         SecureRandom random = new SecureRandom();
-        return random.nextInt(100);//size Bulletin Board
+        return random.nextInt(BOARDSIZE);
     }
 
     private static byte[] generateTag(){
@@ -749,20 +763,33 @@ public class Controller implements Runnable{
         }
     }
 
+    @FXML private void setServerIP(){
+        TextInputDialog dialog = new TextInputDialog(serverIP);
+        dialog.setTitle("Set Server IP");
+        dialog.setHeaderText("Set the Server IP-address");
+        dialog.setContentText("Server IP-address:");
+
+        Optional<String> result = dialog.showAndWait();
+        result.ifPresent(name -> {
+            serverIP = result.get();
+            System.out.println("New server IP set");
+            searchBoard();
+        });
+    }
+
     @Override
     public void run() {
         try {
             while(runReceiver){
                 //test for messages from current partner every 5 seconds
-                if (!communicationPartners.isEmpty() && !communicationPartners.get(currentPartner).isAwaitingInitialization()){
-                    searchBoard();
-                    //System.out.println("Polling for: " + currentPartner);
+                if (!communicationPartners.isEmpty() && !communicationPartners.get(currentPartner).isAwaitingInitialization())
                     receive();
-                }
                 Thread.sleep(5000);
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
+
+
 }
