@@ -40,7 +40,7 @@ public class Controller implements Runnable{
     @FXML
     private ListView listView;
     @FXML
-    private TextArea valueTextArea;
+    private TextField valueTextField;
     @FXML
     private TextArea chatHistory;
 
@@ -78,7 +78,6 @@ public class Controller implements Runnable{
         }
         else{
             exitApplication();
-            System.out.println("Finished initialization of application");
         }
     }
 
@@ -232,8 +231,8 @@ public class Controller implements Runnable{
         }
 
         // Get value from textArea
-        value = valueTextArea.getText();
-        valueTextArea.setText("");
+        value = valueTextField.getText();
+        valueTextField.setText("");
 
         //generate new index for next message in bulletin board (depends on size of array bulletin board)
         int nextIndex = generateIndex();
@@ -304,6 +303,9 @@ public class Controller implements Runnable{
 
             //update chathistory
             updateChathistory(value, "receive");
+
+            //receive again to get a cluster of messages faster on startup
+            receive();
 
         }
     }

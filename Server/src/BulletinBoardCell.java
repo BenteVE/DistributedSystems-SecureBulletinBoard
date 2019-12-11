@@ -13,12 +13,16 @@ public class BulletinBoardCell implements Serializable {
     }
 
     //Method to retrieve a value from a cell on the board
-    public byte[] getFromCell(byte[] tag){ //=> probleem: andere bytearray (met zelfde inhoud) => vindt het niet als key
+    public byte[] getFromCell(byte[] tag){
         for(byte[] tagInBoard : cell.keySet()) {
             if (Arrays.equals(tagInBoard, tag)){
                 return cell.remove(tagInBoard);
             }
         }
         return null;
+    }
+
+    public int getMessageAmountCell(){
+        return cell.size();
     }
 }
