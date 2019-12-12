@@ -208,7 +208,7 @@ public class Controller implements Runnable{
 
         //Create temporary keystore with secretkey to give to partner manually
         createKeystore("bump"+username+ "To" + partnerUser + ".jks", "temporary");
-        saveKeyInKeystore("bump"+username+ "To" + partnerUser + ".jks", username + "-receive", "temporary", secretKeyAB);
+        saveKeyInKeystore("bump"+username+ "To" + partnerUser + ".jks", "temporary", "temporary", secretKeyAB);
 
         //Select new partner in listview
         if (!listView.getItems().isEmpty())
@@ -494,7 +494,7 @@ public class Controller implements Runnable{
 
             // Add keys to permanent keystore
             saveKeyInKeystore("CommunicationPartners.jks", currentPartner + "-receive", password,
-                    (SecretKey) keyStore.getKey(currentPartner + "-receive", pwdArray));
+                    (SecretKey) keyStore.getKey("temporary", pwdArray));
 
             if(file.delete()){
                 System.out.println("Deleted Temporary Keystore");
@@ -504,7 +504,6 @@ public class Controller implements Runnable{
         catch (NullPointerException e){
             return null;
         } catch (Exception e){
-            //TODO: implement wrong file chosen
             e.printStackTrace();
         }
 
