@@ -27,6 +27,7 @@ public class MethodsImplementationRMI extends UnicastRemoteObject implements Met
         MessageDigest md = MessageDigest.getInstance("SHA-256");
         byte[] hashedTag = md.digest(tag);
 
+
         //IF there is a message on that index of the Bulletin board with that hashed tag
         //AND the message can be decrypted by Bob
         //THEN return the message

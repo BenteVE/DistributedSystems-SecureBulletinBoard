@@ -21,6 +21,7 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.security.*;
 import java.util.*;
+import java.lang.*;
 
 public class Controller implements Runnable{
 
@@ -35,6 +36,7 @@ public class Controller implements Runnable{
     private String username = null;
     private String password = null;
     private String value = null;
+    private boolean recover = false;
     private boolean runReceiver = false;
 
     @FXML
@@ -48,12 +50,17 @@ public class Controller implements Runnable{
 
         //Check directory for existing keystore, make new keystore with user-given password if no exists
         File file = new File("CommunicationPartners.jks");
-        if(file.exists())
+        if(file.exists()){
             login();
-        else
+        }
+        else {
             createAccount();
-
+        }
         if(loginComplete) {
+            File file2 = new File(username +"SK.jks");
+            if(!file2.exists()){
+                getStaticSecretKeyAndSafeInFile(password);
+            }
             // Add all partner names to listview
             reloadListView();
 
@@ -124,12 +131,38 @@ public class Controller implements Runnable{
             for (String name : temporaryMap.keySet()) {
                 communicationPartners.get(currentPartner).setSendingIndex(temporaryMap.get(name).getReceivingIndex());
                 communicationPartners.get(currentPartner).setSendingTag(temporaryMap.get(name).getReceivingTag());
+                communicationPartners.get(currentPartner).setHashSendingIndex(hashIndex(temporaryMap.get(name).getReceivingIndex()));
+                communicationPartners.get(currentPartner).setHashSendingTag(hashTag(temporaryMap.get(name).getReceivingTag()));
+                System.out.println("Still in initializing before setEncryptedKeyset");
+                setEncryptedKeysetForSending();
+                System.out.println("after encrypted keyset");
+                setEncryptedKeysetForReceiving();
             }
 
         // set awaitingInitialization to false
         communicationPartners.get(currentPartner).setAwaitingInitialization(false);
         displayChathistory();
 
+    }
+
+    private void setEncryptedKeysetForSending(){
+        SecretKey secretKeyAB = getSecretKey("CommunicationPartners.jks", currentPartner + "-send", password);
+        System.out.println("secretkeyAB"+secretKeyAB);
+        int index = communicationPartners.get(currentPartner).getSendingIndex();
+        System.out.println("index " + index);
+        byte[] tag = communicationPartners.get(currentPartner).getSendingTag();
+        System.out.println("tag"+tag);
+        Keyset keyset = new Keyset(index, tag, secretKeyAB);
+        System.out.println("tag keyset: " + keyset.getTag());
+        System.out.println("encrypted keyset: " + encryptKeyset(keyset));
+        communicationPartners.get(currentPartner).setEncryptedKeysetSend(encryptKeyset(keyset));
+    }
+    private void setEncryptedKeysetForReceiving(){
+        SecretKey secretKeyBA = getSecretKey("CommunicationPartners.jks", currentPartner + "-receive", password);
+        int index = communicationPartners.get(currentPartner).getReceivingIndex();
+        byte[] tag = communicationPartners.get(currentPartner).getReceivingTag();
+        Keyset keyset = new Keyset(index, tag, secretKeyBA);
+        communicationPartners.get(currentPartner).setEncryptedKeysetReceive(encryptKeyset(keyset));
     }
 
     @FXML private void searchBoard(){
@@ -197,6 +230,9 @@ public class Controller implements Runnable{
         //Add data to partner
         communicationPartners.get(partnerUser).setReceivingIndex(indexBA);
         communicationPartners.get(partnerUser).setReceivingTag(tagBA);
+        communicationPartners.get(partnerUser).setHashReceivingIndex(hashIndex(indexBA));
+        communicationPartners.get(partnerUser).setHashReceivingTag(hashTag(tagBA));
+
 
         //Create temporary file to give to partner manually
         HashMap<String, PartnerData> temporary = new HashMap<>();
@@ -250,6 +286,52 @@ public class Controller implements Runnable{
         int index = communicationPartners.get(currentPartner).getSendingIndex();
         byte[] tag = communicationPartners.get(currentPartner).getSendingTag();
 
+        //controleer hash index en tag
+        byte[] hashedIndex = hashIndex(index);
+        byte[] hashedTag2 = hashTag(tag);
+        //if corrupted index
+        if(!Arrays.equals(hashedIndex,communicationPartners.get(currentPartner).getHashSendingIndex())){
+            //try to recover index
+            byte[] encryptedKeysetSend = communicationPartners.get(currentPartner).getEncryptedKeysetSend();
+            byte[] decryptedKeysetSend = decryptKeyset(encryptedKeysetSend);
+            Keyset keyset = Keyset.getInstance(decryptedKeysetSend);
+            index = keyset.getIndex();
+            communicationPartners.get(currentPartner).setSendingIndex(index);
+            hashedIndex = hashIndex(index);
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Corrupt index");
+            alert.setHeaderText("Recovery started");
+            alert.setContentText("Corrupt index, recovery started!");
+            alert.showAndWait();
+        }
+        //if corrupted tag
+        if(!Arrays.equals(hashedTag2,communicationPartners.get(currentPartner).getHashSendingTag())){
+            //try to recover index
+            byte[] encryptedKeysetSend = communicationPartners.get(currentPartner).getEncryptedKeysetSend();
+            byte[] decryptedKeysetSend = decryptKeyset(encryptedKeysetSend);
+            Keyset keyset = Keyset.getInstance(decryptedKeysetSend);
+            tag = keyset.getTag();
+            communicationPartners.get(currentPartner).setSendingTag(tag);
+            hashedTag2 = hashTag(tag);
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Corrupt tag");
+            alert.setHeaderText("Recovery started");
+            alert.setContentText("Corrupt tag, recovery started!");
+            alert.showAndWait();
+        }
+        /*else{
+            //enkel voor te testen
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("succes");
+            alert.setHeaderText("Correct test");
+            alert.setContentText("succes");
+            alert.showAndWait();
+        }*/
+
+        //calculate hash index and tag
+        communicationPartners.get(currentPartner).setHashSendingIndex(hashIndex(nextIndex));
+        communicationPartners.get(currentPartner).setHashSendingTag(hashTag(nextTag));
+
         //hash the tag before placing in Bulletin Board
         byte[] hashedTag = hashTag(tag);
 
@@ -265,6 +347,8 @@ public class Controller implements Runnable{
             //replace the stored old index and tag with the new index and tag
             communicationPartners.get(currentPartner).setSendingIndex(nextIndex);
             communicationPartners.get(currentPartner).setSendingTag(nextTag);
+
+            setEncryptedKeysetForSending();
 
         }catch(NullPointerException e){
             Alert alert = new Alert(Alert.AlertType.ERROR);
@@ -283,23 +367,65 @@ public class Controller implements Runnable{
         int index = communicationPartners.get(currentPartner).getReceivingIndex();
         byte[] tag = communicationPartners.get(currentPartner).getReceivingTag();
 
+        //test hash
+        byte[] hashedIndex = hashIndex(index);
+        byte[] hashedTag2 = hashTag(tag);
+        if(!Arrays.equals(hashedIndex,communicationPartners.get(currentPartner).getHashReceivingIndex())){
+            //corrupted index
+            System.out.println("corrupted index");
+            updateChathistory("Corruption detected, recovery started", "send");
+            //valueTextField.setText("Stop sending, corruption detected in index");
+
+            //try to recover index
+            byte[] encryptedKeysetReceive = communicationPartners.get(currentPartner).getEncryptedKeysetReceive();
+            byte[] decryptedKeysetReceive = decryptKeyset(encryptedKeysetReceive);
+            Keyset keyset = Keyset.getInstance(decryptedKeysetReceive);
+            index = keyset.getIndex();
+            communicationPartners.get(currentPartner).setReceivingIndex(index);
+            hashedIndex = hashIndex(index);
+        }
+        if(!Arrays.equals(hashedTag2,communicationPartners.get(currentPartner).getHashReceivingTag())){
+            System.out.println("foute tag");
+            updateChathistory("Corruption detected, recovery started", "send");
+            //valueTextField.setText("Stop sending, corruption detected in tag");
+
+            //try to recover tag
+            byte[] encryptedKeysetReceive = communicationPartners.get(currentPartner).getEncryptedKeysetReceive();
+            byte[] decryptedKeysetReceive = decryptKeyset(encryptedKeysetReceive);
+            Keyset keyset = Keyset.getInstance(decryptedKeysetReceive);
+            tag = keyset.getTag();
+            communicationPartners.get(currentPartner).setReceivingTag(tag);
+            hashedTag2 = hashTag(tag);
+        }
+
         //use function get (implemented by server) to check a specific index and tag in the bulletin board
         //(use get function with regular tag, server hashes tag to match hashed tag associated with value in Bulletin Board)
         byte[] encryptedByteArray = implementation.get(index, tag);
-
+        System.out.println(encryptedByteArray);
         if (encryptedByteArray != null) {
+            System.out.println("in encrypted byte array");
 
             //IF there is a message on that index of the Bulletin board with that specific tag (message will be returned by get function)
             //Decrypt bytearray and Convert into Message object
-            Message message = Message.getInstance(decryptMessage(encryptedByteArray));
-            value = message.getMessage();
+            byte[] decryptedMessage = decryptMessage(encryptedByteArray);
+            //if message could be decrypted
+            if(decryptedMessage!=null){
+                Message message = Message.getInstance(decryptedMessage);
+                value = message.getMessage();
 
-            //IF the message is successfully decrypted by Bob
-            //replace the current index and tag by the new index and tag that were piggybacked on the message
-            communicationPartners.get(currentPartner).setReceivingIndex(message.getIndex());
-            communicationPartners.get(currentPartner).setReceivingTag(message.getTag());
+                //IF the message is successfully decrypted by Bob
+                //replace the current index and tag by the new index and tag that were piggybacked on the message
+                communicationPartners.get(currentPartner).setReceivingIndex(message.getIndex());
+                communicationPartners.get(currentPartner).setReceivingTag(message.getTag());
 
-            deriveKey("receive");
+                //calculate new hash index and tag
+                communicationPartners.get(currentPartner).setHashReceivingIndex(hashIndex(message.getIndex()));
+                communicationPartners.get(currentPartner).setHashReceivingTag(hashTag(message.getTag()));
+
+                deriveKey("receive");
+            }
+
+            setEncryptedKeysetForReceiving();
 
             //update chathistory
             updateChathistory(value, "receive");
@@ -312,7 +438,7 @@ public class Controller implements Runnable{
 
     private byte[] hashTag(byte[] tag){
         try{
-            System.out.println(tag);
+            System.out.println("Tag" + tag);
             MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
             byte[] hashedTag = messageDigest.digest(tag);
             return hashedTag;
@@ -322,6 +448,37 @@ public class Controller implements Runnable{
             return null;
         }
 
+    }
+
+    //TODO test hash en test recovery door recovery te plaatsen in code
+    private byte[] hashIndex(int index){
+        try{
+            byte bindex = (byte) index;
+            byte[] byteArray = new byte[]{bindex};
+            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
+            byte[] hashedIndex = messageDigest.digest(byteArray);
+            System.out.println("hashedIndex" + hashedIndex);
+            return hashedIndex;
+        }catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+        /*
+        try{
+            System.out.println(index);
+            Integer s_int = new Integer(index);
+            System.out.println("index" + s_int);;
+            // Returning a hash code value for this object
+            int hashedIndex = s_int.hashCode();
+            System.out.println("hashedIndex" + hashedIndex);
+            return hashedIndex;
+        }
+        catch (Exception e){
+            e.printStackTrace();
+            return -1;
+        }
+
+         */
     }
 
     private void deriveKey(String origin){
@@ -365,8 +522,35 @@ public class Controller implements Runnable{
 
     }
 
-    private byte[] decryptMessage(byte[] encryptedMessage){
+    private byte[] encryptKeyset(Keyset keyset){
+        System.out.println("in encrypted keyset");
 
+        try{
+            //Get symmetric key for communication partner
+            SecretKey secretKey = getStaticSecretKey(username +"SK.jks", username, password);
+
+            System.out.println("keyset.getIndex" + keyset.getIndex());
+            //Create and initialise cipher
+            Cipher cipher = Cipher.getInstance("AES");
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey);
+           // System.out.println("keyset.getKey: "+ keyset.getByteEKey());
+            System.out.println("keyset.getBytes: " + keyset.getBytes());
+            //Encrypt object with cipher
+            byte[] bytesKeyset = keyset.getBytes();
+            System.out.println("bytesKeyset: " + bytesKeyset);
+            byte[] cipherMessage = cipher.doFinal(keyset.getBytes());
+            System.out.println("cipherMessage: " +cipherMessage);
+            return cipherMessage;
+        }
+        catch (Exception e){
+            System.out.println("in exception getBytes()");
+            e.printStackTrace();
+            return null;
+        }
+
+    }
+
+    private byte[] decryptMessage(byte[] encryptedMessage){
         try{
             //Get symmetric key for communication partner
             SecretKey secretKey = getSecretKey("CommunicationPartners.jks", currentPartner+"-receive", password);
@@ -378,7 +562,42 @@ public class Controller implements Runnable{
             //Encrypt object with cipher
             byte[] decryptedMessage = cipher.doFinal(encryptedMessage);
 
+            recover = false;
             return decryptedMessage;
+        }
+        catch (Exception e){
+            if(recover) {
+                updateChathistory("Corruption detected, please inform sending partner", "send");
+                valueTextField.setText("Stop sending, corruption detected");
+                return null;
+            }else{
+                //Try to recover correct key
+
+                byte[] encryptedKeysetReceive = communicationPartners.get(currentPartner).getEncryptedKeysetReceive();
+                byte[] decryptedKeysetReceive = decryptKeyset(encryptedKeysetReceive);
+                Keyset keyset = Keyset.getInstance(decryptedKeysetReceive);
+                SecretKey eKey = keyset.getEKey();
+                saveKeyInKeystore("CommunicationPartners.jks", currentPartner +"-receive", password, eKey);
+                System.out.println("key recovered");
+                recover = true;
+                return null;
+            }
+        }
+    }
+
+    private byte[] decryptKeyset(byte[] keyset){
+        try{
+            //Get static key
+            SecretKey staticSecretKey = getStaticSecretKey(username +"SK.jks", username, password);
+
+            //Create and initialise cipher
+            Cipher cipher = Cipher.getInstance("AES");
+            cipher.init(Cipher.DECRYPT_MODE, staticSecretKey);
+
+            //Encrypt object with cipher
+            byte[] decryptedKeyset = cipher.doFinal(keyset);
+
+            return decryptedKeyset;
         }
         catch (Exception e){
             e.printStackTrace();
@@ -453,6 +672,30 @@ public class Controller implements Runnable{
         }
     }
 
+    private static void saveStaticKeyInKeystore(String keyStoreName, String user, String pwd, SecretKey secretKey){
+        try{
+            KeyStore keyStore = KeyStore.getInstance("JCEKS");
+
+            //Load keystore
+            char[] pwdArray = pwd.toCharArray();
+            keyStore.load(new FileInputStream(keyStoreName), pwdArray);
+
+            //Save Secretkey in Keystore
+            KeyStore.SecretKeyEntry secretKeyEntry = new KeyStore.SecretKeyEntry(secretKey);
+            KeyStore.ProtectionParameter password = new KeyStore.PasswordProtection(pwdArray);
+            keyStore.setEntry(user, secretKeyEntry, password);
+
+            //Save Keystore to File system
+            FileOutputStream fileOutputStream = new FileOutputStream(keyStoreName);
+            keyStore.store(fileOutputStream, pwdArray);
+
+            System.out.println("Saved in keystore: " + user);
+
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+
     private static SecretKey getSecretKey(String keyStoreName, String partnername, String pwd) {
         try {
             KeyStore keyStore = KeyStore.getInstance("JCEKS");
@@ -461,6 +704,23 @@ public class Controller implements Runnable{
             char[] pwdArray = pwd.toCharArray();
             keyStore.load(new FileInputStream(keyStoreName), pwdArray);
             SecretKey secretKey = (SecretKey) keyStore.getKey(partnername, pwdArray);
+
+            return secretKey;
+        }
+        catch (Exception e){
+            return null;
+        }
+    }
+
+    private static SecretKey getStaticSecretKey(String keyStoreName, String user, String pwd) {
+        try {
+            KeyStore keyStore = KeyStore.getInstance("JCEKS");
+            System.out.println("keystore " + keyStore);
+            //Load keystore
+            char[] pwdArray = pwd.toCharArray();
+            keyStore.load(new FileInputStream(keyStoreName), pwdArray);
+            SecretKey secretKey = (SecretKey) keyStore.getKey(user, pwdArray);
+            System.out.println("secretkey "+ secretKey);
 
             return secretKey;
         }
@@ -508,6 +768,15 @@ public class Controller implements Runnable{
         }
 
         return null;
+    }
+
+    private void getStaticSecretKeyAndSafeInFile(String password){
+
+        SecretKey staticKey = generateSecretKey();
+
+        createKeystore(username +"SK.jks", password);
+        saveStaticKeyInKeystore(username +"SK.jks", username, password, staticKey);
+
     }
 
     private static HashMap<String, PartnerData> getPartnerFromTemporaryFile(String filepath){

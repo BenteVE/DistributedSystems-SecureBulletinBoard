@@ -16,6 +16,9 @@ public class BulletinBoardCell implements Serializable {
     public byte[] getFromCell(byte[] tag){
         for(byte[] tagInBoard : cell.keySet()) {
             if (Arrays.equals(tagInBoard, tag)){
+                System.out.println("match found");
+                System.out.println("tagInBoard "  +tagInBoard);
+                System.out.println("meegegeven tag" + tag);
                 return cell.remove(tagInBoard);
             }
         }

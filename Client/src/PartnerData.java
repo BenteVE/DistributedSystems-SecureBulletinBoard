@@ -9,6 +9,12 @@ public class PartnerData implements Serializable {
     byte[] sendingTag;
     int receivingIndex;
     byte[] receivingTag;
+    byte[] hashSendingIndex;
+    byte[] hashSendingTag;
+    byte[] hashReceivingIndex;
+    byte[] hashReceivingTag;
+    byte[] encryptedKeysetSend;
+    byte[] encryptedKeysetReceive;
 
     ArrayList<String> chatHistory;
 
@@ -78,6 +84,54 @@ public class PartnerData implements Serializable {
 
     public byte[] getReceivingTag() {
         return receivingTag;
+    }
+
+    public byte[] getHashSendingIndex() {
+        return hashSendingIndex;
+    }
+
+    public void setHashSendingIndex(byte[] hashSendingIndex) {
+        this.hashSendingIndex = hashSendingIndex;
+    }
+
+    public byte[] getHashSendingTag() {
+        return hashSendingTag;
+    }
+
+    public void setHashSendingTag(byte[] hashSendingTag) {
+        this.hashSendingTag = hashSendingTag;
+    }
+
+    public byte[] getHashReceivingIndex() {
+        return hashReceivingIndex;
+    }
+
+    public void setHashReceivingIndex(byte[] hashReceivingIndex) {
+        this.hashReceivingIndex = hashReceivingIndex;
+    }
+
+    public byte[] getHashReceivingTag() {
+        return hashReceivingTag;
+    }
+
+    public void setHashReceivingTag(byte[] hashReceivingTag) {
+        this.hashReceivingTag = hashReceivingTag;
+    }
+
+    public byte[] getEncryptedKeysetSend() {
+        return encryptedKeysetSend;
+    }
+
+    public void setEncryptedKeysetSend(byte[] encryptedKeysetSend) {
+        this.encryptedKeysetSend = encryptedKeysetSend;
+    }
+
+    public byte[] getEncryptedKeysetReceive() {
+        return encryptedKeysetReceive;
+    }
+
+    public void setEncryptedKeysetReceive(byte[] encryptedKeysetReceive) {
+        this.encryptedKeysetReceive = encryptedKeysetReceive;
     }
 }
 
