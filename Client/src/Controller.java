@@ -168,6 +168,10 @@ public class Controller implements Runnable{
     @FXML private void searchBoard(){
 
         try {
+            //set socksproxy to tor
+            System.setProperty("socksProxyHost","127.0.0.1");
+            System.setProperty("socksProxyPort", "9050");
+
             // fire to localhost port 1099
             Registry myRegistry = LocateRegistry.getRegistry(serverIP, 1099);
             //TODO read in from file for more flexibility
