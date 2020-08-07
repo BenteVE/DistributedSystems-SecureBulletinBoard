@@ -37,7 +37,7 @@ public class BulletinBoard implements Serializable{
             // create on port 1099
             registry = LocateRegistry.createRegistry(1099);
 
-            MethodsImplementationRMI methodsImplementationRMI = new MethodsImplementationRMI(board);
+            MethodsImplementationRMI methodsImplementationRMI = new MethodsImplementationRMI(board, boardsize);
 
             // create a new service named SecureBulletinBoard
             registry.rebind("SecureBulletinBoard", methodsImplementationRMI);

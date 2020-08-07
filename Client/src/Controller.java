@@ -291,7 +291,7 @@ public class Controller implements Runnable{
         }
         boolean change = implementation.changeServer();
         System.out.println("change: " + change);
-        /*if (change){
+        if (change){
             TextInputDialog dialog = new TextInputDialog(serverIP);
             dialog.setTitle("Set new Server IP");
             dialog.setHeaderText("Server too busy, change server");
@@ -303,7 +303,7 @@ public class Controller implements Runnable{
                 System.out.println(result.get());
                 System.out.println("New server IP set");
             });
-        }*/
+        }
         // Get value from textArea
         value = valueTextField.getText();
         valueTextField.setText("");
@@ -395,10 +395,10 @@ public class Controller implements Runnable{
             alert.setContentText("Server could not be reached");
             alert.showAndWait();
         }
-        /*if(change){
+        if(change){
             //receiveOnce();
             changeServer();
-        }*/
+        }
     }
 
     private void receive() throws RemoteException {

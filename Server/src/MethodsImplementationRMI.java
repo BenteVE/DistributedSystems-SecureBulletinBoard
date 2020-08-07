@@ -4,11 +4,12 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 public class MethodsImplementationRMI extends UnicastRemoteObject implements MethodsRMI {
-    BulletinBoard board;
     BulletinBoardCell[] bulletinBoard;
+    int boardSize;
 
-    public MethodsImplementationRMI(BulletinBoardCell[] bulletinBoard) throws RemoteException {
+    public MethodsImplementationRMI(BulletinBoardCell[] bulletinBoard, int boardSize) throws RemoteException {
         this.bulletinBoard = bulletinBoard;
+        this.boardSize = boardSize;
     }
 
     @Override
@@ -42,12 +43,8 @@ public class MethodsImplementationRMI extends UnicastRemoteObject implements Met
 
     @Override
     public boolean changeServer() throws RemoteException{
-        /*int teller=0;
-        for(int i=0; i< board.getSize(); i++){
-            System.out.println("boardsize: "+ board.getSize());
-            System.out.println("i: "+ i);
-            System.out.println("cel: "+bulletinBoard[i]);
-            System.out.println("amount: "+ bulletinBoard[i].getMessageAmountCell());
+        int teller=0;
+        for(int i=0; i< boardSize; i++){
             teller += bulletinBoard[i].getMessageAmountCell();
         }
         if(teller > 2){
@@ -56,8 +53,7 @@ public class MethodsImplementationRMI extends UnicastRemoteObject implements Met
         }else{
             System.out.println("false");
             return false;
-        }*/
-        return false;
+        }
     }
 
 }
