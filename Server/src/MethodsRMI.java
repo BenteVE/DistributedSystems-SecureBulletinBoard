@@ -8,4 +8,9 @@ public interface MethodsRMI extends Remote { //extends Remote to avoid local app
 
     public byte[] get(int index, byte[] tag) throws RemoteException, NoSuchAlgorithmException;
 
-}
+    public boolean changeServer() throws RemoteException;
+
+
+
+
+    }

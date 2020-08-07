@@ -4,7 +4,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 public class MethodsImplementationRMI extends UnicastRemoteObject implements MethodsRMI {
-
+    BulletinBoard board;
     BulletinBoardCell[] bulletinBoard;
 
     public MethodsImplementationRMI(BulletinBoardCell[] bulletinBoard) throws RemoteException {
@@ -38,6 +38,26 @@ public class MethodsImplementationRMI extends UnicastRemoteObject implements Met
         System.out.println("Returned " + value);
         return value;
 
+    }
+
+    @Override
+    public boolean changeServer() throws RemoteException{
+        /*int teller=0;
+        for(int i=0; i< board.getSize(); i++){
+            System.out.println("boardsize: "+ board.getSize());
+            System.out.println("i: "+ i);
+            System.out.println("cel: "+bulletinBoard[i]);
+            System.out.println("amount: "+ bulletinBoard[i].getMessageAmountCell());
+            teller += bulletinBoard[i].getMessageAmountCell();
+        }
+        if(teller > 2){
+            System.out.println("true");
+            return true;
+        }else{
+            System.out.println("false");
+            return false;
+        }*/
+        return false;
     }
 
 }

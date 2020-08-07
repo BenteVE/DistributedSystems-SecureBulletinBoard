@@ -5,12 +5,14 @@ public class Message implements Serializable {
     int index;
     byte[] tag;
     String message;
+    String newIp;
 
     //Constructor
-    public Message(int index, byte[] tag, String message){
+    public Message(int index, byte[] tag, String message, String newIp){
         this.index = index;
         this.tag = tag;
         this.message = message;
+        this.newIp = newIp;
     }
 
     //Method to turn object into bytearray
@@ -68,4 +70,6 @@ public class Message implements Serializable {
     public void setMessage(String message) {
         this.message = message;
     }
+
+    public String getNewIp() { return newIp; }
 }

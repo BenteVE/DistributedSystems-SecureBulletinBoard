@@ -86,6 +86,10 @@ public class BulletinBoard implements Serializable{
         } catch (Exception e) { e.printStackTrace(); }
     }
 
+    protected int getSize(){
+        return boardsize;
+    }
+
 }
 
 

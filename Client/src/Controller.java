@@ -1,3 +1,6 @@
+import com.sun.deploy.net.HttpRequest;
+import com.sun.deploy.net.HttpResponse;
+import com.sun.scenario.effect.impl.sw.sse.SSEBlend_SRC_OUTPeer;
 import javafx.application.Platform;
 import javafx.beans.value.ChangeListener;
 import javafx.collections.FXCollections;
@@ -11,15 +14,22 @@ import javafx.scene.layout.Region;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Pair;
+import sun.net.www.http.HttpClient;
 
 import javax.crypto.*;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLConnection;
+import java.nio.file.Paths;
 import java.rmi.ConnectException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.security.*;
+import java.sql.SQLOutput;
+import java.time.Duration;
 import java.util.*;
 import java.lang.*;
 
@@ -29,6 +39,7 @@ public class Controller implements Runnable{
     private String serverIP = "localhost";
 
     private MethodsRMI implementation;
+    private MethodsRMI sendImplementation;
     private HashMap<String, PartnerData> communicationPartners;
     private ObservableList<String> partnerNames;
     private String currentPartner = null;
@@ -38,6 +49,7 @@ public class Controller implements Runnable{
     private String value = null;
     private boolean recover = false;
     private boolean runReceiver = false;
+    private int tellerTest = 0;
 
     @FXML
     private ListView listView;
@@ -139,6 +151,7 @@ public class Controller implements Runnable{
                 setEncryptedKeysetForReceiving();
             }
 
+        communicationPartners.get(currentPartner).setIpAdres(serverIP);
         // set awaitingInitialization to false
         communicationPartners.get(currentPartner).setAwaitingInitialization(false);
         displayChathistory();
@@ -169,15 +182,20 @@ public class Controller implements Runnable{
 
         try {
             //set socksproxy to tor
-            System.setProperty("socksProxyHost","127.0.0.1");
-            System.setProperty("socksProxyPort", "9050");
+            //System.getProperties().put( "proxySet", "true" );
+            //System.setProperty("socksProxyHost","127.0.0.1");
+            //System.setProperty("socksProxyPort", "9050");
+
 
             // fire to localhost port 1099
+            System.out.println(serverIP);
             Registry myRegistry = LocateRegistry.getRegistry(serverIP, 1099);
             //TODO read in from file for more flexibility
 
             // search for SecureBulletinBoard
             implementation = (MethodsRMI) myRegistry.lookup("SecureBulletinBoard");
+
+            sendImplementation = implementation;
 
             //if not receiver thread is running, start a new thread
             if (!runReceiver) {
@@ -186,6 +204,7 @@ public class Controller implements Runnable{
             }
 
         } catch (ConnectException e){
+            System.out.println(e);
             System.out.println("Connection to server lost");
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setTitle("Error");
@@ -193,6 +212,7 @@ public class Controller implements Runnable{
             alert.setContentText("Try again later or change the host");
             alert.showAndWait();
         } catch(Exception e) {
+            System.out.println(e);
             System.out.println("Couldn't reach server ...");
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setTitle("Error");
@@ -200,7 +220,7 @@ public class Controller implements Runnable{
             alert.setContentText("Try again later or change the host");
             alert.showAndWait();
         }
-
+        System.out.println("gelukt");
     }
 
     @FXML private void bump() {
@@ -269,7 +289,21 @@ public class Controller implements Runnable{
             alert.showAndWait();
             return;
         }
+        boolean change = implementation.changeServer();
+        System.out.println("change: " + change);
+        /*if (change){
+            TextInputDialog dialog = new TextInputDialog(serverIP);
+            dialog.setTitle("Set new Server IP");
+            dialog.setHeaderText("Server too busy, change server");
+            dialog.setContentText("Server IP-address:");
 
+            Optional<String> result = dialog.showAndWait();
+            result.ifPresent(name -> {
+                serverIP = result.get();
+                System.out.println(result.get());
+                System.out.println("New server IP set");
+            });
+        }*/
         // Get value from textArea
         value = valueTextField.getText();
         valueTextField.setText("");
@@ -281,7 +315,7 @@ public class Controller implements Runnable{
         byte[] nextTag = generateTag();
 
         //create Message Object with index, tag and message string
-        Message message = new Message(nextIndex, nextTag, value);
+        Message message = new Message(nextIndex, nextTag, value, serverIP);
 
         //Encrypt message
         byte[] cipherMessage = encryptMessage(message);
@@ -341,7 +375,7 @@ public class Controller implements Runnable{
 
         try{
             //use function add (implemented by server) to place encrypted package on specific index, associated with hashed tag
-            implementation.add(index, hashedTag, cipherMessage);
+            sendImplementation.add(index, hashedTag, cipherMessage);
 
             //update to chatHistory
             updateChathistory(value, "send");
@@ -361,7 +395,10 @@ public class Controller implements Runnable{
             alert.setContentText("Server could not be reached");
             alert.showAndWait();
         }
-
+        /*if(change){
+            //receiveOnce();
+            changeServer();
+        }*/
     }
 
     private void receive() throws RemoteException {
@@ -415,6 +452,35 @@ public class Controller implements Runnable{
             //if message could be decrypted
             if(decryptedMessage!=null){
                 Message message = Message.getInstance(decryptedMessage);
+                if(!communicationPartners.get(currentPartner).getIpAdres().equals(message.getNewIp())){
+                    System.out.println("ipadres veranderd: "+ message.getNewIp());
+                    communicationPartners.get(currentPartner).setIpAdres(message.getNewIp());
+                    //implementationSend wijzigen
+                    try{
+                        Registry partnerRegistry = LocateRegistry.getRegistry(communicationPartners.get(currentPartner).getIpAdres(), 1099);
+                        sendImplementation = (MethodsRMI) partnerRegistry.lookup("SecureBulletinBoard");
+                    }catch (ConnectException e){
+                        System.out.println(e);
+                        System.out.println("Connection to server lost");
+                        Alert alert = new Alert(Alert.AlertType.ERROR);
+                        alert.setTitle("Error");
+                        alert.setHeaderText("Lost Connection to server");
+                        alert.setContentText("Try again later or change the host");
+                        alert.showAndWait();
+                    } catch(Exception e) {
+                        System.out.println(e);
+                        System.out.println("Couldn't reach server ...");
+                        Alert alert = new Alert(Alert.AlertType.ERROR);
+                        alert.setTitle("Error");
+                        alert.setHeaderText("Can't reach server");
+                        alert.setContentText("Try again later or change the host");
+                        alert.showAndWait();
+                    }
+
+                }else{
+                    System.out.println("ipadres uit message niet veranderd: "+ message.getNewIp());
+                }
+
                 value = message.getMessage();
 
                 //IF the message is successfully decrypted by Bob
@@ -440,9 +506,32 @@ public class Controller implements Runnable{
         }
     }
 
+    private void changeServer(){
+        try{
+            Registry registry = LocateRegistry.getRegistry(serverIP, 1099);
+            implementation = (MethodsRMI) registry.lookup("SecureBulletinBoard");
+        }catch (ConnectException e){
+            System.out.println(e);
+            System.out.println("Connection to server lost");
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Error");
+            alert.setHeaderText("Lost Connection to server");
+            alert.setContentText("Try again later or change the host");
+            alert.showAndWait();
+        } catch(Exception e) {
+            System.out.println(e);
+            System.out.println("Couldn't reach server ...");
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Error");
+            alert.setHeaderText("Can't reach server");
+            alert.setContentText("Try again later or change the host");
+            alert.showAndWait();
+        }
+    }
+
     private byte[] hashTag(byte[] tag){
         try{
-            System.out.println("Tag" + tag);
+            //System.out.println("Tag" + tag);
             MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
             byte[] hashedTag = messageDigest.digest(tag);
             return hashedTag;
@@ -461,7 +550,7 @@ public class Controller implements Runnable{
             byte[] byteArray = new byte[]{bindex};
             MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
             byte[] hashedIndex = messageDigest.digest(byteArray);
-            System.out.println("hashedIndex" + hashedIndex);
+            //System.out.println("hashedIndex" + hashedIndex);
             return hashedIndex;
         }catch (Exception e) {
             e.printStackTrace();
@@ -538,12 +627,12 @@ public class Controller implements Runnable{
             Cipher cipher = Cipher.getInstance("AES");
             cipher.init(Cipher.ENCRYPT_MODE, secretKey);
            // System.out.println("keyset.getKey: "+ keyset.getByteEKey());
-            System.out.println("keyset.getBytes: " + keyset.getBytes());
+            //System.out.println("keyset.getBytes: " + keyset.getBytes());
             //Encrypt object with cipher
             byte[] bytesKeyset = keyset.getBytes();
-            System.out.println("bytesKeyset: " + bytesKeyset);
+            //System.out.println("bytesKeyset: " + bytesKeyset);
             byte[] cipherMessage = cipher.doFinal(keyset.getBytes());
-            System.out.println("cipherMessage: " +cipherMessage);
+            //System.out.println("cipherMessage: " +cipherMessage);
             return cipherMessage;
         }
         catch (Exception e){
@@ -719,12 +808,12 @@ public class Controller implements Runnable{
     private static SecretKey getStaticSecretKey(String keyStoreName, String user, String pwd) {
         try {
             KeyStore keyStore = KeyStore.getInstance("JCEKS");
-            System.out.println("keystore " + keyStore);
+            //System.out.println("keystore " + keyStore);
             //Load keystore
             char[] pwdArray = pwd.toCharArray();
             keyStore.load(new FileInputStream(keyStoreName), pwdArray);
             SecretKey secretKey = (SecretKey) keyStore.getKey(user, pwdArray);
-            System.out.println("secretkey "+ secretKey);
+            //System.out.println("secretkey "+ secretKey);
 
             return secretKey;
         }
@@ -1046,6 +1135,7 @@ public class Controller implements Runnable{
         Optional<String> result = dialog.showAndWait();
         result.ifPresent(name -> {
             serverIP = result.get();
+            System.out.println(result.get());
             System.out.println("New server IP set");
             searchBoard();
         });

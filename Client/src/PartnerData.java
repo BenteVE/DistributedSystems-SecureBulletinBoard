@@ -15,6 +15,7 @@ public class PartnerData implements Serializable {
     byte[] hashReceivingTag;
     byte[] encryptedKeysetSend;
     byte[] encryptedKeysetReceive;
+    String ipAdres;
 
     ArrayList<String> chatHistory;
 
@@ -24,6 +25,7 @@ public class PartnerData implements Serializable {
         this.sendingTag = null;
         this.receivingIndex = -1;
         this.receivingTag = null;
+        this.ipAdres = "localhost";
         this.chatHistory = new ArrayList<>();
     }
 
@@ -33,6 +35,7 @@ public class PartnerData implements Serializable {
         this.sendingTag = null;
         this.receivingIndex = receivingIndex;
         this.receivingTag = receivingTag;
+        this.ipAdres = "localhost";
         this.chatHistory = new ArrayList<>();
     }
 
@@ -133,6 +136,10 @@ public class PartnerData implements Serializable {
     public void setEncryptedKeysetReceive(byte[] encryptedKeysetReceive) {
         this.encryptedKeysetReceive = encryptedKeysetReceive;
     }
+
+    public void setIpAdres(String ipAdres) { this.ipAdres = ipAdres; }
+
+    public String getIpAdres() { return ipAdres; }
 }
 
 

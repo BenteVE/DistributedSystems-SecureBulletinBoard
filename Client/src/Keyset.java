@@ -17,19 +17,19 @@ public class Keyset implements Serializable{
 
     //Method to turn object into bytearray
     public byte[] getBytes(){
-        System.out.println("in keyset.getBytes()");
-        System.out.println("this: "+ this);
-        System.out.println(this.index);
-        System.out.println(this.tag);
+        //System.out.println("in keyset.getBytes()");
+        //System.out.println("this: "+ this);
+        //System.out.println(this.index);
+        //System.out.println(this.tag);
         try{
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            System.out.println("stap 1 baos gelukt");
+            //System.out.println("stap 1 baos gelukt");
             ObjectOutputStream oos = new ObjectOutputStream(baos);
-            System.out.println("stap 2 baos gelukt");
+            //System.out.println("stap 2 baos gelukt");
             oos.writeObject(this);
-            System.out.println("step 3 okay");
-            System.out.println("baos" + baos);
-            System.out.println("baos.toByteARray" + baos.toByteArray());
+            //System.out.println("step 3 okay");
+            //System.out.println("baos" + baos);
+            //System.out.println("baos.toByteARray" + baos.toByteArray());
             return baos.toByteArray();
         }catch (IOException ioe){
             System.err.println(ioe.getLocalizedMessage());
