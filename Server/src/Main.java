@@ -16,7 +16,7 @@ public class Main extends Application{
         Parent root = loader.load();
         controller = loader.getController();
         primaryStage.setTitle("Server Demo GUI");
-        primaryStage.setScene(new Scene(root, 500, 500));
+        primaryStage.setScene(new Scene(root, 500, 700));
         primaryStage.show();
     }
 

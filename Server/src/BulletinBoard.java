@@ -1,5 +1,6 @@
 import javafx.fxml.FXML;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextArea;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
@@ -19,6 +20,7 @@ public class BulletinBoard implements Serializable{
     private Registry registry;
 
     @FXML private TilePane tilePane;
+    @FXML private TextArea statusServer;
 
     public void initialize(){
         File file = new File(filename);
@@ -30,6 +32,7 @@ public class BulletinBoard implements Serializable{
         startServer();
 
         System.out.println("system is ready");
+        statusServer.appendText("System is ready \n");
     }
 
     private void startServer(){
@@ -37,7 +40,7 @@ public class BulletinBoard implements Serializable{
             // create on port 1099
             registry = LocateRegistry.createRegistry(1099);
 
-            MethodsImplementationRMI methodsImplementationRMI = new MethodsImplementationRMI(board, boardsize);
+            MethodsImplementationRMI methodsImplementationRMI = new MethodsImplementationRMI(board, boardsize, this);
 
             // create a new service named SecureBulletinBoard
             registry.rebind("SecureBulletinBoard", methodsImplementationRMI);
@@ -76,6 +79,7 @@ public class BulletinBoard implements Serializable{
         try(ObjectOutputStream objectOutputStream = new ObjectOutputStream(new FileOutputStream(filename))) {
             objectOutputStream.writeObject(board);
             System.out.println("Board saved to file");
+            statusServer.appendText("Board saved to file");
         } catch (IOException e) { e.printStackTrace(); }
     }
 
@@ -83,11 +87,12 @@ public class BulletinBoard implements Serializable{
         try(ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(filename))){
             board = (BulletinBoardCell[]) objectInputStream.readObject();
             System.out.println("Board loaded from file");
+            statusServer.appendText("Board loaded from file");
         } catch (Exception e) { e.printStackTrace(); }
     }
 
-    protected int getSize(){
-        return boardsize;
+    protected TextArea getStatusServer(){
+        return statusServer;
     }
 
 }

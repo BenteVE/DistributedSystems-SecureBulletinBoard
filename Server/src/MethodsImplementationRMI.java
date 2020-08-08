@@ -1,3 +1,6 @@
+//import javafx.fxml.FXML;
+//import javafx.scene.control.TextArea;
+
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.security.MessageDigest;
@@ -6,10 +9,15 @@ import java.security.NoSuchAlgorithmException;
 public class MethodsImplementationRMI extends UnicastRemoteObject implements MethodsRMI {
     BulletinBoardCell[] bulletinBoard;
     int boardSize;
+    BulletinBoard board;
 
-    public MethodsImplementationRMI(BulletinBoardCell[] bulletinBoard, int boardSize) throws RemoteException {
+    //@FXML
+    //private TextArea statusServer;
+
+    public MethodsImplementationRMI(BulletinBoardCell[] bulletinBoard, int boardSize, BulletinBoard board) throws RemoteException {
         this.bulletinBoard = bulletinBoard;
         this.boardSize = boardSize;
+        this.board = board;
     }
 
     @Override
@@ -17,6 +25,7 @@ public class MethodsImplementationRMI extends UnicastRemoteObject implements Met
         //place the value on a specific index in the bulletin board, associated with a specific tag
         bulletinBoard[index].addToCell(tag, value);
         System.out.println("Added to index " + index + " and tag " + tag);
+        board.getStatusServer().appendText("Added to index" + index + "\n");
     }
 
     @Override
@@ -37,6 +46,10 @@ public class MethodsImplementationRMI extends UnicastRemoteObject implements Met
         //Get value from board (NULL if board is empty)
         byte[] value = bulletinBoard[index].getFromCell(hashedTag);
         System.out.println("Returned " + value);
+        if(value!= null){
+            board.getStatusServer().appendText("Called get for index" + index + "\n");
+            board.getStatusServer().appendText("Returned from index " + index + "\n");
+        }
         return value;
 
     }
@@ -49,6 +62,7 @@ public class MethodsImplementationRMI extends UnicastRemoteObject implements Met
         }
         if(teller > 2){
             System.out.println("true");
+            board.getStatusServer().appendText("Server overloaded, some clients have to change server");
             return true;
         }else{
             System.out.println("false");
