@@ -1,5 +1,6 @@
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 public class PartnerData implements Serializable {
 
@@ -17,7 +18,7 @@ public class PartnerData implements Serializable {
     byte[] encryptedKeysetReceive;
     String ipAdres;
 
-    ArrayList<String> chatHistory;
+    ArrayList<HashMap<String, String>> chatHistory;
 
     public PartnerData(){
         awaitingInitialization = true;
@@ -39,15 +40,15 @@ public class PartnerData implements Serializable {
         this.chatHistory = new ArrayList<>();
     }
 
-    public void addToChathistory(String value){
+    public void addToChathistory(HashMap<String, String> value){
         this.chatHistory.add(value);
     }
 
-    public ArrayList<String> getChathistory(){
+    public ArrayList<HashMap<String, String>> getChathistory(){
         return chatHistory;
     }
 
-    public void setChatHistory(ArrayList<String> chatHistory) {
+    public void setChatHistory(ArrayList<HashMap<String, String>> chatHistory) {
         this.chatHistory = chatHistory;
     }
 

@@ -5,10 +5,14 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
+import javafx.scene.text.Font;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Pair;
@@ -54,7 +58,7 @@ public class Controller implements Runnable{
     @FXML
     private TextField valueTextField;
     @FXML
-    private TextArea chatHistory;
+    private VBox chatHistory;
 
     public void initialize(){
 
@@ -80,8 +84,14 @@ public class Controller implements Runnable{
                         currentPartner = newValue;
                         System.out.println("selected " + currentPartner);
 
-                        if (communicationPartners.get(currentPartner).isAwaitingInitialization())
-                            chatHistory.setText("This partner is still awaiting initialization.");
+                        if (communicationPartners.get(currentPartner).isAwaitingInitialization()){
+                            //chatHistory.setText("This partner is still awaiting initialization.");
+                            Label label = new Label("This partner is still awaiting initialization.");
+                            label.setPrefHeight(40);
+                            label.setFont(new Font("Arial", 14));
+                            chatHistory.getChildren().clear();
+                            chatHistory.getChildren().add(label);
+                        }
                         else
                             displayChathistory();
                     });
@@ -1106,21 +1116,95 @@ public class Controller implements Runnable{
     }
 
     private void displayChathistory(){
-        chatHistory.setText("");
-        for (String message : communicationPartners.get(currentPartner).getChathistory())
-            chatHistory.appendText(message);
+        chatHistory.getChildren().clear();
+        for (HashMap<String, String> message : communicationPartners.get(currentPartner).getChathistory()){
+            if(message.keySet().iterator().next().equals("You: ")){
+                HBox mess = new HBox();
+                mess.setAlignment(Pos.CENTER_RIGHT);
+                Label label = new Label(message.keySet().iterator().next());
+                label.setFont(new Font("Arial", 12));
+                Label label2 = new Label(message.get(message.keySet().toArray()[0]));
+                label2.setFont(new Font("Arial", 14));
+                label2.setStyle("-fx-background-color: #9BD6EB; -fx-background-radius: 10px; -fx-padding: 10px;");
+                mess.getChildren().add(label);
+                mess.getChildren().add(label2);
+                mess.setMargin(label2,new Insets(5,20,0,0));
+                mess.setMargin(label,new Insets(5,0,0,0));
+                chatHistory.getChildren().add(mess);
+            }else{
+                HBox mess = new HBox();
+                mess.setAlignment(Pos.CENTER_LEFT);
+                Label label = new Label(message.keySet().iterator().next());
+                label.setFont(new Font("Arial", 12));
+                Label label2 = new Label(message.get(message.keySet().toArray()[0]));
+                label2.setFont(new Font("Arial", 14));
+                label2.setStyle("-fx-background-color: #E4E2E4; -fx-background-radius: 10px; -fx-padding: 10px;");
+                mess.getChildren().add(label);
+                mess.getChildren().add(label2);
+                mess.setMargin(label2,new Insets(5,0,0,0));
+                mess.setMargin(label,new Insets(5,0,0,20));
+                chatHistory.getChildren().add(mess);
+            }
+            /*HBox mess = new HBox();
+            Label label = new Label(message.keySet().iterator().next());
+            label.setPrefHeight(40);
+            label.setFont(new Font("Arial", 12));
+            Label label2 = new Label(message.get(message.keySet().toArray()[0]));
+            label2.setPrefHeight(40);
+            label2.setFont(new Font("Arial", 14));
+            mess.getChildren().add(label);
+            mess.getChildren().add(label2);
+            chatHistory.getChildren().add(mess);
+            //chatHistory.appendText(message.keySet().iterator().next());
+            //chatHistory.appendText(message.get(message.keySet().toArray()[0]));
+
+             */
+        }
     }
+
 
     private void updateChathistory(String value, String origin){
         if(origin == "send"){
-            value = "You: " + value + "\n";
-            communicationPartners.get(currentPartner).addToChathistory(value);
-            chatHistory.appendText(value);
+            HashMap<String, String> bericht = new HashMap<>();
+            bericht.put("You: ", value);
+            //value = "You: " + value + "\n";
+            communicationPartners.get(currentPartner).addToChathistory(bericht);
+            //chatHistory.appendText(value);
+            HBox mess = new HBox();
+            mess.setAlignment(Pos.CENTER_RIGHT);
+            Label label = new Label("You: ");
+            label.setFont(new Font("Arial", 12));
+            Label label2 = new Label(value);
+            label2.setFont(new Font("Arial", 14));
+            label2.setStyle("-fx-background-color: #9BD6EB; -fx-background-radius: 10px; -fx-padding: 10px;");
+            mess.getChildren().add(label);
+            mess.getChildren().add(label2);
+            mess.setMargin(label2,new Insets(5,20,0,0));
+            mess.setMargin(label,new Insets(5,0,0,0));
+            chatHistory.getChildren().add(mess);
         }
         else if(origin == "receive"){
-            value = currentPartner + ": " + value + "\n";
-            communicationPartners.get(currentPartner).addToChathistory(value);
-            chatHistory.appendText(value);
+            HashMap<String, String> bericht = new HashMap<>();
+            bericht.put(currentPartner+ ": ", value);
+            //value = currentPartner + ": " + value + "\n";
+            communicationPartners.get(currentPartner).addToChathistory(bericht);
+            //chatHistory.appendText(value);
+            Platform.runLater(
+                    () -> {
+                        HBox mess = new HBox();
+                        mess.setAlignment(Pos.CENTER_LEFT);
+                        Label label = new Label(currentPartner+": ");
+                        label.setFont(new Font("Arial", 12));
+                        Label label2 = new Label(value);
+                        label2.setFont(new Font("Arial", 14));
+                        label2.setStyle("-fx-background-color: #E4E2E4; -fx-background-radius: 10px; -fx-padding: 10px;");
+                        mess.getChildren().add(label);
+                        mess.getChildren().add(label2);
+                        mess.setMargin(label2,new Insets(5,0,0,0));
+                        mess.setMargin(label,new Insets(5,0,0,20));
+                        chatHistory.getChildren().add(mess);
+                    }
+            );
         }
     }
 

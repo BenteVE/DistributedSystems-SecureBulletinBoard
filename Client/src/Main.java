@@ -13,7 +13,7 @@ public class Main extends Application {
         Parent root = loader.load();
         Controller controller = loader.getController();
         primaryStage.setTitle("Chat Application");
-        primaryStage.setScene(new Scene(root, 1200, 600));
+        primaryStage.setScene(new Scene(root, 1000, 600));
         primaryStage.show();
         primaryStage.setOnHidden(e -> {
             controller.exitApplication();
