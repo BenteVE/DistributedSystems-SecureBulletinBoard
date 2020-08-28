@@ -87,7 +87,7 @@ public class BulletinBoard implements Serializable{
         try(ObjectInputStream objectInputStream = new ObjectInputStream(new FileInputStream(filename))){
             board = (BulletinBoardCell[]) objectInputStream.readObject();
             System.out.println("Board loaded from file");
-            statusServer.appendText("Board loaded from file");
+            statusServer.appendText("Board loaded from file \n");
         } catch (Exception e) { e.printStackTrace(); }
     }
 

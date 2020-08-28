@@ -25,7 +25,7 @@ public class MethodsImplementationRMI extends UnicastRemoteObject implements Met
         //place the value on a specific index in the bulletin board, associated with a specific tag
         bulletinBoard[index].addToCell(tag, value);
         System.out.println("Added to index " + index + " and tag " + tag);
-        board.getStatusServer().appendText("Added to index" + index + "\n");
+        board.getStatusServer().appendText("Added to index " + index + "\n");
     }
 
     @Override
@@ -47,7 +47,7 @@ public class MethodsImplementationRMI extends UnicastRemoteObject implements Met
         byte[] value = bulletinBoard[index].getFromCell(hashedTag);
         System.out.println("Returned " + value);
         if(value!= null){
-            board.getStatusServer().appendText("Called get for index" + index + "\n");
+            board.getStatusServer().appendText("Called get for index " + index + "\n");
             board.getStatusServer().appendText("Returned from index " + index + "\n");
         }
         return value;

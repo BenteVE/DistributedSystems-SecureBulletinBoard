@@ -6,6 +6,7 @@
 <?import javafx.scene.control.Menu?>
 <?import javafx.scene.control.MenuBar?>
 <?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
@@ -20,7 +21,11 @@
    <center>
       <VBox prefHeight="200.0" prefWidth="100.0" BorderPane.alignment="CENTER">
          <children>
-            <VBox fx:id="chatHistory" prefHeight="388.0" prefWidth="750.0" VBox.vgrow="ALWAYS" />
+            <ScrollPane prefHeight="499.0" prefWidth="750.0">
+               <content>
+                  <VBox fx:id="chatHistory" prefHeight="499.0" prefWidth="750.0" />
+               </content>
+            </ScrollPane>
             <HBox alignment="CENTER" prefHeight="26.0" prefWidth="750.0">
                <children>
                   <TextField fx:id="valueTextField" onAction="#send" HBox.hgrow="ALWAYS">
