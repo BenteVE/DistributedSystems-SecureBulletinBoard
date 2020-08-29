@@ -21,6 +21,7 @@ public class BulletinBoard implements Serializable{
 
     @FXML private TilePane tilePane;
     @FXML private TextArea statusServer;
+    @FXML private Label messagecount;
 
     public void initialize(){
         File file = new File(filename);
@@ -91,8 +92,20 @@ public class BulletinBoard implements Serializable{
         } catch (Exception e) { e.printStackTrace(); }
     }
 
+    protected int getCountMessagesBoard(){
+        int teller=0;
+        for(int i=0; i< boardsize; i++){
+            teller += board[i].getMessageAmountCell();
+        }
+        return teller;
+    }
+
     protected TextArea getStatusServer(){
         return statusServer;
+    }
+
+    protected Label getMessagecount(){
+        return messagecount;
     }
 
 }

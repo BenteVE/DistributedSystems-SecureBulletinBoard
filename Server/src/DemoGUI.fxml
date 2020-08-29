@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<?import javafx.scene.control.Label?>
 <?import javafx.scene.control.Menu?>
 <?import javafx.scene.control.MenuBar?>
 <?import javafx.scene.control.MenuItem?>
@@ -25,6 +26,7 @@
       <VBox prefHeight="700.0" prefWidth="500.0" BorderPane.alignment="CENTER">
          <children>
             <TilePane fx:id="tilePane" minHeight="-Infinity" minWidth="-Infinity" prefHeight="500.0" prefWidth="500.0" />
+            <Label fx:id="messagecount" prefWidth="500.0" text="Messages in board: 0" />
             <ScrollPane prefHeight="200.0" prefWidth="500.0">
                <content>
                   <TextArea fx:id="statusServer" editable="false" prefHeight="200.0" prefWidth="500.0" />

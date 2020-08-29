@@ -1,6 +1,8 @@
 //import javafx.fxml.FXML;
 //import javafx.scene.control.TextArea;
 
+import javafx.application.Platform;
+
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.security.MessageDigest;
@@ -25,6 +27,12 @@ public class MethodsImplementationRMI extends UnicastRemoteObject implements Met
         //place the value on a specific index in the bulletin board, associated with a specific tag
         bulletinBoard[index].addToCell(tag, value);
         System.out.println("Added to index " + index + " and tag " + tag);
+        Platform.runLater(
+                () -> {
+                    board.updateBoard();
+                    board.getMessagecount().setText("Messages in board: " + String.valueOf(board.getCountMessagesBoard()));
+                }
+        );
         board.getStatusServer().appendText("Added to index " + index + "\n");
     }
 
@@ -47,6 +55,12 @@ public class MethodsImplementationRMI extends UnicastRemoteObject implements Met
         byte[] value = bulletinBoard[index].getFromCell(hashedTag);
         System.out.println("Returned " + value);
         if(value!= null){
+            Platform.runLater(
+                    () -> {
+                        board.updateBoard();
+                        board.getMessagecount().setText("Messages in board: " + String.valueOf(board.getCountMessagesBoard()));
+                    }
+            );
             board.getStatusServer().appendText("Called get for index " + index + "\n");
             board.getStatusServer().appendText("Returned from index " + index + "\n");
         }
@@ -56,10 +70,7 @@ public class MethodsImplementationRMI extends UnicastRemoteObject implements Met
 
     @Override
     public boolean changeServer() throws RemoteException{
-        int teller=0;
-        for(int i=0; i< boardSize; i++){
-            teller += bulletinBoard[i].getMessageAmountCell();
-        }
+        int teller = board.getCountMessagesBoard();
         if(teller > 2){
             System.out.println("true");
             board.getStatusServer().appendText("Server overloaded, some clients have to change server");
