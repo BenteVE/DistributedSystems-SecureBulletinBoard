@@ -67,9 +67,9 @@
                 </Menu>
               </menus>
             </MenuBar>
-            <HBox alignment="CENTER_LEFT" prefHeight="100.0" prefWidth="200.0">
+            <HBox alignment="CENTER_LEFT" prefHeight="100.0" prefWidth="200.0" style="-fx-background-color: #9BD6EB">
                <children>
-                  <Text strokeType="OUTSIDE" strokeWidth="0.0" text="Select Partner:">
+                  <Text fx:id="text" strokeType="OUTSIDE" strokeWidth="0.0" text="Select Partner:">
                      <font>
                         <Font size="18.0" />
                      </font>

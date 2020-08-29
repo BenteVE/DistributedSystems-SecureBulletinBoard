@@ -13,6 +13,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.text.Font;
+import javafx.scene.text.Text;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Pair;
@@ -59,6 +60,8 @@ public class Controller implements Runnable{
     private TextField valueTextField;
     @FXML
     private VBox chatHistory;
+    @FXML
+    private Text text;
 
     public void initialize(){
 
@@ -75,6 +78,7 @@ public class Controller implements Runnable{
             if(!file2.exists()){
                 getStaticSecretKeyAndSafeInFile(password);
             }
+            text.setText("Select partner for "+ username+":");
             // Add all partner names to listview
             reloadListView();
 
@@ -83,7 +87,28 @@ public class Controller implements Runnable{
                     (observable, oldValue, newValue) -> {
                         currentPartner = newValue;
                         System.out.println("selected " + currentPartner);
-
+                        //wijzig de server want andere partner
+                        serverIP = communicationPartners.get(currentPartner).getIpAdres();
+                        try{
+                            Registry registry = LocateRegistry.getRegistry(communicationPartners.get(currentPartner).getIpAdres(), 1099);
+                            implementation = (MethodsRMI) registry.lookup("SecureBulletinBoard");
+                        }catch (ConnectException e){
+                            System.out.println(e);
+                            System.out.println("Connection to server lost");
+                            Alert alert = new Alert(Alert.AlertType.ERROR);
+                            alert.setTitle("Error");
+                            alert.setHeaderText("Lost Connection to server");
+                            alert.setContentText("Try again later or change the host");
+                            alert.showAndWait();
+                        } catch(Exception e) {
+                            System.out.println(e);
+                            System.out.println("Couldn't reach server ...");
+                            Alert alert = new Alert(Alert.AlertType.ERROR);
+                            alert.setTitle("Error");
+                            alert.setHeaderText("Can't reach server");
+                            alert.setContentText("Try again later or change the host");
+                            alert.showAndWait();
+                        }
                         if (communicationPartners.get(currentPartner).isAwaitingInitialization()){
                             //chatHistory.setText("This partner is still awaiting initialization.");
                             Label label = new Label("This partner is still awaiting initialization.");
@@ -194,16 +219,14 @@ public class Controller implements Runnable{
             //System.setProperty("socksProxyHost","127.0.0.1");
             //System.setProperty("socksProxyPort", "9050");
 
+            //System.setProperty("java.rmi.server.hostname",serverIP);
 
             // fire to localhost port 1099
-            System.out.println(serverIP);
             Registry myRegistry = LocateRegistry.getRegistry(serverIP, 1099);
             //TODO read in from file for more flexibility
 
             // search for SecureBulletinBoard
             implementation = (MethodsRMI) myRegistry.lookup("SecureBulletinBoard");
-
-            sendImplementation = implementation;
 
             //if not receiver thread is running, start a new thread
             if (!runReceiver) {
@@ -264,7 +287,7 @@ public class Controller implements Runnable{
         communicationPartners.get(partnerUser).setReceivingTag(tagBA);
         communicationPartners.get(partnerUser).setHashReceivingIndex(hashIndex(indexBA));
         communicationPartners.get(partnerUser).setHashReceivingTag(hashTag(tagBA));
-
+        communicationPartners.get(partnerUser).setIpAdres(serverIP);
 
         //Create temporary file to give to partner manually
         HashMap<String, PartnerData> temporary = new HashMap<>();
@@ -383,7 +406,7 @@ public class Controller implements Runnable{
 
         try{
             //use function add (implemented by server) to place encrypted package on specific index, associated with hashed tag
-            sendImplementation.add(index, hashedTag, cipherMessage);
+            implementation.add(index, hashedTag, cipherMessage);
 
             //update to chatHistory
             updateChathistory(value, "send");
@@ -463,10 +486,11 @@ public class Controller implements Runnable{
                 if(!communicationPartners.get(currentPartner).getIpAdres().equals(message.getNewIp())){
                     System.out.println("ipadres veranderd: "+ message.getNewIp());
                     communicationPartners.get(currentPartner).setIpAdres(message.getNewIp());
-                    //implementationSend wijzigen
+                    serverIP=message.getNewIp();
+                    //implementation wijzigen dus sturen en luisteren op zelfde server voor deze partner
                     try{
-                        Registry partnerRegistry = LocateRegistry.getRegistry(communicationPartners.get(currentPartner).getIpAdres(), 1099);
-                        sendImplementation = (MethodsRMI) partnerRegistry.lookup("SecureBulletinBoard");
+                        Registry registry = LocateRegistry.getRegistry(communicationPartners.get(currentPartner).getIpAdres(), 1099);
+                        implementation = (MethodsRMI) registry.lookup("SecureBulletinBoard");
                     }catch (ConnectException e){
                         System.out.println(e);
                         System.out.println("Connection to server lost");
@@ -516,8 +540,11 @@ public class Controller implements Runnable{
 
     private void changeServer(){
         try{
+            System.out.println("nieuwe serverip: "+ serverIP);
             Registry registry = LocateRegistry.getRegistry(serverIP, 1099);
             implementation = (MethodsRMI) registry.lookup("SecureBulletinBoard");
+            communicationPartners.get(currentPartner).setIpAdres(serverIP);
+
         }catch (ConnectException e){
             System.out.println(e);
             System.out.println("Connection to server lost");
@@ -1227,10 +1254,10 @@ public class Controller implements Runnable{
     public void run() {
         try {
             while(runReceiver){
-                //test for messages from current partner every 5 seconds
+                //test for messages from current partner every second
                 if (!communicationPartners.isEmpty() && !communicationPartners.get(currentPartner).isAwaitingInitialization())
                     receive();
-                Thread.sleep(5000);
+                Thread.sleep(1000);
             }
         } catch (Exception e) {
             e.printStackTrace();

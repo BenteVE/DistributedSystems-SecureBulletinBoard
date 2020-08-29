@@ -71,9 +71,9 @@ public class MethodsImplementationRMI extends UnicastRemoteObject implements Met
     @Override
     public boolean changeServer() throws RemoteException{
         int teller = board.getCountMessagesBoard();
-        if(teller > 2){
+        if(teller >= 3){
             System.out.println("true");
-            board.getStatusServer().appendText("Server overloaded, some clients have to change server");
+            board.getStatusServer().appendText("Server overloaded, some clients have to change server \n");
             return true;
         }else{
             System.out.println("false");
